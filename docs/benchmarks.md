@@ -1,19 +1,26 @@
-# Benchmark and evaluation
+# Benchmarks and evaluation
 
-Run `.venv/bin/python scripts/benchmark.py --replay tests/fixtures/`. On the
-Apple M3 Pro development Mac, 100 deterministic replays exercised 14,500 frames.
-A local run recorded 6.83 µs median and 8.33 µs p95 for landmark geometry and
-gesture-state processing. Each replay emitted 39 position updates, one short
-click, one down/up pair and eight scroll events. Camera acquisition, MediaPipe
-inference, the browser, and OS dispatch are outside this measurement.
+Run the synthetic benchmark from the repository root.
 
-For live evaluation, repeat a fixed set of center and edge targets with each
-hand and at two lighting levels. Record endpoint error in logical pixels,
-tracking availability, intended and emitted gestures, successful drags, and
-false activations during a ten-minute no-action period. Report precision,
-recall and clicks per minute using the marked trials. The Studio’s median/p95
-for desktop input time spans frame availability after OpenCV read through event
-posting. Motion-to-visible-response timing needs an independent measurement.
-Keep the timing and outcomes separate by camera resolution and lighting.
+```sh
+.venv/bin/python scripts/benchmark.py --replay tests/fixtures/
+```
 
-No human accuracy or end-to-end latency figures have been collected.
+On the Apple M3 Pro development Mac, 100 replays processed 14,500 frames.
+Landmark geometry and gesture-state processing took 6.83 µs at the median and
+8.33 µs at the 95th percentile. Each replay produced 39 position updates, one
+click, one press-and-release pair, and eight scroll events. These measurements
+cover the gesture engine. Camera capture, MediaPipe inference, UI rendering,
+and OS event delivery fall outside the benchmark.
+
+For webcam evaluation, repeat a fixed set of center and edge targets with each
+hand under two lighting conditions. Record target error in logical pixels,
+tracking availability, intended and recognized gestures, successful drags, and
+false activations during ten minutes of idle testing. Use the marked trials to
+calculate precision, recall, and clicks per minute. Report results separately
+for each camera resolution and lighting condition.
+
+The Studio reports median and 95th-percentile time from the completion of an
+OpenCV frame read to the posting of an OS event. Measuring the delay from
+physical movement to visible response requires an independent timing test.
+Human accuracy and end-to-end response time are still unmeasured.

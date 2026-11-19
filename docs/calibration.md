@@ -1,29 +1,37 @@
-# Calibration and camera smoke test
+# Calibration and webcam check
 
-1. Select **Solo simulazione** to start the webcam in dry-run. Place it approximately at eye level and use
-   diffuse lighting. Keep the other hand outside the frame.
-2. Show a fist until the progress indicator completes. Point at the four edges
-   of the tracking guide with a comfortable wrist position. If the full practice
-   area is hard to reach, stop the source and edit the normalized bounds under
-   **Calibrazione**. A narrower area maps less hand travel to the full output.
-3. Test ten cursor acquisitions, ten taps, five drag releases and three scrolls
-   in each direction. Stop and adjust **Pinza chiusa**, **Pinza aperta** and the
-   drag threshold if clicks turn into drags. Use **Ripristina valori** followed
-   by **Salva calibrazione** to return to defaults.
-4. Start each trial while dragging. Open your palm, move out of camera view,
-   or press Escape in separate trials. In the palm trial, open all four fingers without
-   pausing in the pointing pose. Expect a release followed by pause. Show a fist
-   again and check that the paused session stays paused.
-5. Only after a successful dry-run, grant Accessibility and select **Scansiona
-   per controllare il Mac**. Hold your extended index still until the progress
-   bar fills and **Puntatore attivo** appears. Repeat the
-   same trials on the main display using a local scratch document and harmless
-   draggable UI. Keep the terminal and physical mouse available. Record failures
-   by gesture and lighting instead of extrapolating from synthetic tests.
-6. Close the Studio during a held drag. Verify that the mouse is released and
-   the camera LED turns off. Relaunch the Studio and verify that it is stopped.
+The Studio currently uses Italian labels. Use the labels in bold to find the
+controls in the app.
 
-Camera index 0 is the OpenCV default. Other indices can be selected after stopping
-the source. Mirroring works for either hand. The calibration file lives at
-`~/Library/Application Support/KineticDesk/profile.json` on macOS. The environment
-variable `KINETICDESK_CONFIG_DIR` overrides the directory for tests.
+1. Select **Solo simulazione** (Simulation only) to start the webcam. Position
+   the camera around eye level, use diffuse lighting, and keep your second hand
+   outside the frame.
+2. Hold a fist until the progress bar fills. Point toward all four edges of
+   the tracking guide. If you have to reach too far to cover the practice area,
+   stop the session and narrow the bounds in **Calibrazione** (Calibration).
+   Narrower bounds map less hand movement to the full output area.
+3. Try ten pointer acquisitions, ten clicks, five drag releases, and three
+   scrolls in each direction. Adjust **Pinza chiusa** (Closed pinch) or
+   **Pinza aperta** (Open pinch) if the engine misses your pinch or its release.
+   Increase the drag threshold if short clicks turn into drags. To restore
+   defaults, select **Ripristina valori** (Restore defaults), then
+   **Salva calibrazione** (Save calibration).
+4. During separate drags, hold up an open palm, move out of view, or press
+   **Esc** while the Studio has focus. In the palm trial, open all four
+   fingers in one motion. Check that the button releases and the session
+   pauses. Holding a fist afterward should leave the session paused.
+5. After a successful simulation, grant Accessibility permission and select
+   **Scansiona per controllare il Mac** (Scan to control the Mac). Hold your
+   index finger still until **Puntatore attivo** (Pointer active) appears.
+   Repeat the trials on the primary display with a scratch document and
+   disposable draggable items. Keep the physical mouse available. Record
+   failures by gesture and lighting level.
+6. Close the Studio during a drag. Check that the mouse button releases and
+   the camera light goes out. When you reopen the Studio, the session should
+   start stopped.
+
+The camera at index 0 is OpenCV's default. Stop the camera before choosing
+another index. The mirrored preview works with either hand. On macOS,
+the calibration file lives at
+`~/Library/Application Support/KineticDesk/profile.json`. Set
+`KINETICDESK_CONFIG_DIR` to use a different directory for testing.

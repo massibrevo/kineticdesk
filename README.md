@@ -1,70 +1,101 @@
 # KineticDesk
 
-Controllo del desktop con una webcam e una mano. KineticDesk elabora i fotogrammi sul Mac e parte in modalità di prova. Il primo rilascio copre movimento del cursore, clic, trascinamento, scorrimento e pausa.
+KineticDesk lets you control your Mac's pointer with one hand and a webcam.
+It recognizes movement, clicks, drag and drop, scrolling, and pause. Video is
+processed on your Mac. Start with the built-in demo or practice with the webcam
+before enabling desktop control.
 
-![KineticDesk Studio durante il replay sintetico, con lo scheletro della mano e il riquadro trascinato](docs/studio-replay.png)
+![KineticDesk Studio during a synthetic replay, showing tracked hand landmarks and the drag target](docs/studio-replay.png)
 
-## App macOS
+## Run the macOS app
 
-Apri **KineticDesk.app** con un doppio clic dal Finder. L’app contiene il
-servizio locale, l’interfaccia e il modello. Dal menu **KineticDesk → Autorizza
-Accessibilità…** puoi aprire la richiesta di autorizzazione per il controllo
-del cursore. La fotocamera viene richiesta quando avvii una scansione o una
-simulazione.
+If you already have `KineticDesk.app`, double-click it in Finder. The app includes
+the Studio, the local service, and the hand-tracking model. macOS prompts for
+Camera access when you first start a hand scan or a webcam simulation.
 
-Per creare il bundle dal codice sorgente, esegui il bootstrap indicato sotto,
-poi lancia `python3 scripts/build_macos.py`. Il bundle locale viene creato in
-`.cache/macos/dist/KineticDesk.app` per l’architettura del Mac che lo costruisce.
+To build the app from source, run the bootstrap below, then run
+`python3 scripts/build_macos.py`. The build produces
+`.cache/macos/dist/KineticDesk.app` for your Mac's architecture.
 
-## Avvio dal codice sorgente
+## Run from source
 
-Servono macOS, Node.js 22 e [uv](https://docs.astral.sh/uv/). In alternativa a uv, usa Python 3.11 o 3.12. Esegui dalla cartella del repository:
+You need macOS, Node.js 22, and [uv](https://docs.astral.sh/uv/). You can use
+Python 3.11 or 3.12 in place of uv. From the repository root, run:
 
 ```sh
 python3 scripts/bootstrap.py
 python3 scripts/dev.py
 ```
 
-Apri l’indirizzo stampato dal processo, di norma `http://127.0.0.1:5173`. Se la porta è occupata, esegui `python3 scripts/dev.py --port 5174`. Il bootstrap scarica le dipendenze bloccate e il modello ufficiale. Lo Studio funziona offline dopo l’installazione.
+Open the printed URL, usually `http://127.0.0.1:5173`. If that port is in use,
+run `python3 scripts/dev.py --port 5174`. The bootstrap downloads the pinned
+dependencies and the official MediaPipe model. The Studio runs offline after
+setup.
 
-Scegli **Demo dei gesti** per riprodurre una sequenza sintetica nell’area prova.
-Con **Solo simulazione** puoi provare gli stessi gesti usando la fotocamera.
-Premi **Mostra anteprima** se vuoi controllare l’inquadratura. Usa **Espandi Studio**
-per allargare l’area di lavoro e passare a schermo intero se il browser lo consente.
-L’area di tracciamento predefinita copre l’80% della larghezza e dell’altezza
-del fotogramma. Le calibrazioni salvate continuano ad avere la precedenza.
+## Try the gestures
 
-Per inviare input a macOS, concedi **Accessibilità** in **Impostazioni di Sistema → Privacy e sicurezza** all’app che lancia il processo. Per un avvio dal terminale, inizia con Terminale o iTerm. Se macOS attribuisce l’accesso a Python o all’app ospitante, usa il nome mostrato dal sistema. Riavvia dal terminale dopo la modifica se macOS lo richiede. Premi **Avvia scansione e controllo del Mac**. Consenti l’accesso alla fotocamera se macOS lo chiede. Nell’anteprima, mostra una mano, distendi solo l’indice verso l’alto e tienilo fermo finché la barra è piena. Quando lo Studio mostra **Puntatore attivo**, muovi la mano per muovere il puntatore. Usa **Torna alla simulazione** per provare senza input di sistema.
+The Studio currently uses Italian interface labels. Choose **Demo dei gesti**
+(Gesture demo) to run a synthetic sequence or **Solo simulazione** (Simulation
+only) to practice with your webcam. Select **Mostra anteprima** (Show preview)
+to check the framing or **Espandi Studio** (Expand Studio) to enlarge the
+workspace. The default tracking area covers 80% of each frame dimension.
+A saved calibration overrides these defaults.
 
-| Gesto | Azione |
+For desktop control, grant Accessibility permission in **System Settings →
+Privacy & Security → Accessibility**. In the native app, use **KineticDesk →
+Autorizza Accessibilità…** (Authorize Accessibility) to request it. When running
+from source, grant permission to the app macOS identifies as the launcher, such
+as Terminal or iTerm. Restart the launcher if macOS requests it.
+
+Select **Avvia scansione e controllo del Mac** (Start scan and control the Mac).
+Show one hand and hold your index finger up until the progress bar fills.
+When you see **Puntatore attivo** (Pointer active), move your hand to steer the
+pointer. Choose **Torna alla simulazione** (Return to simulation) to practice
+without sending input to macOS.
+
+| Gesture | Action |
 | --- | --- |
-| Indice disteso e fermo per circa mezzo secondo durante la scansione | Abilita il puntatore del Mac. In simulazione, chiudi il pugno per 750 ms. |
-| Indice disteso, altre dita ripiegate | Muove il cursore. Smetti di puntare per fermarlo. |
-| Pinza breve partendo dal puntamento | Clic sinistro al rilascio. |
-| Pinza tenuta almeno 400 ms | Afferra. Muovi la mano per trascinare e apri le dita per rilasciare. |
-| Indice e medio distesi, anulare e mignolo piegati | Scorri spostando le dita in verticale. |
-| Palmo aperto | Pausa. Per riprendere il controllo desktop, avvia una nuova scansione nello Studio. |
+| Hold your index finger steady for about half a second during a scan | Enables desktop control. In simulation, hold a fist for 750 ms to start. |
+| Extend your index finger with the other fingers relaxed | Moves the pointer. Relax your index finger to stop it. |
+| Briefly pinch your thumb and index finger after pointing | Left-clicks on release. |
+| Hold the pinch for about 400 ms | Grabs the item. Move your hand to drag, then open the pinch to drop. |
+| Extend your index and middle fingers and move them vertically | Scrolls while keeping the pointer still. |
+| Hold up an open palm | Pauses control. Start a new scan to resume. |
 
-**Esc** mette in pausa quando lo Studio ha il focus. **Stop** spegne anche la fotocamera. Puoi arrestare il processo con **Ctrl+C** nel terminale da cui lo hai avviato. Un angolo del display principale attiva il fail-safe alla successiva azione di input. Quando la scheda viene nascosta, il controllo desktop va in pausa.
+**Esc** pauses control while the Studio has focus. **Stop** also turns off the
+camera. Hiding the Studio pauses desktop control. Moving the physical pointer
+into a corner of the main display triggers the fail-safe on the next input
+action. Quit the native app with **⌘Q** or press **Ctrl+C** in the terminal if
+you launched from source.
 
-## Verifiche e compatibilità
+## Verification and platform support
 
 ```sh
 python3 scripts/verify.py
 .venv/bin/python scripts/benchmark.py --replay tests/fixtures/
+```
+
+For the browser tests, leave the Studio running on port 5174. In a second terminal,
+run:
+
+```sh
 cd frontend
 npx playwright install chromium
 npx playwright test
 ```
 
-Per Playwright, avvia prima lo Studio sulla porta 5174. Le verifiche automatiche usano esclusivamente il replay o un adattatore finto.
+Automated tests use synthetic replay or a simulated input adapter. On an Apple
+Silicon Mac, manual checks covered the native app, live webcam capture,
+permission detection, Quartz initialization, and MediaPipe inference. Live
+gesture accuracy and actual pointer injection from the installed app still
+need validation. Desktop control targets the primary display on macOS.
 
-Su macOS Apple Silicon sono stati verificati lo Studio, i cinque gesti in replay, il rilevamento delle autorizzazioni, l’inizializzazione Quartz e l’inferenza MediaPipe su un fotogramma vuoto. Restano da verificare il tracciamento di una mano reale e l’invio di input al desktop. L’adattatore desktop mappa il display principale. Windows, Linux e multi-monitor non sono supportati nell’MVP.
+- [Architecture and model](docs/architecture.md)
+- [Gesture state machine](docs/gesture-state-machine.md)
+- [Calibration and webcam check](docs/calibration.md)
+- [Privacy and security](docs/privacy-security.md)
+- [Benchmarks and evaluation](docs/benchmarks.md)
+- [Contributing](CONTRIBUTING.md)
 
-- [Architettura e modello](docs/architecture.md)
-- [Macchina a stati](docs/gesture-state-machine.md)
-- [Calibrazione e prova con webcam](docs/calibration.md)
-- [Privacy e sicurezza](docs/privacy-security.md)
-- [Benchmark e protocollo di valutazione](docs/benchmarks.md)
-
-Il codice è distribuito con [licenza MIT](LICENSE). Il modello viene scaricato dalla fonte ufficiale e rimane fuori dal repository.
+The source code uses the [MIT License](LICENSE). The build downloads the
+official model separately.

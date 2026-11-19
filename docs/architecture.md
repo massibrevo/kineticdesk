@@ -2,37 +2,42 @@
 
 ```mermaid
 flowchart LR
-  C[OpenCV camera thread] --> Q[Latest frame slot]
-  Q --> M[MediaPipe Tasks VIDEO detector]
-  M --> G[Geometry and gesture engine]
+  C[OpenCV capture] --> Q[Latest frame]
+  Q --> M[MediaPipe Hand Landmarker]
+  M --> G[Gesture engine]
   R[Synthetic landmark replay] --> G
   G --> S[Session runtime]
-  S -->|Consent and arm| O[macOS Quartz adapter]
+  S -->|User consent and scan| O[macOS Quartz input]
   S -->|Authenticated WebSocket| U[React Studio]
   U -->|Heartbeat and commands| S
   W[Watchdog] --> S
 ```
 
-Camera capture and inference run on separate threads. The handoff holds one frame.
-Inference uses the newest frame and drops stale frames. The runtime serializes
-adapter calls, external commands, transitions and release under one lock.
-The independent watchdog expires the browser lease and ends a stalled camera session.
-The browser receives snapshots up to 50 Hz. Capture requests 60 fps and uses the
-rate available from the camera. OS actions use fresh tracking frames directly. The adapter uses Quartz logical coordinates and explicit
-drag events. PyAutoGUI's fail-safe remains enabled.
+OpenCV captures frames on one thread. MediaPipe processes the newest frame on
+another thread. The one-frame buffer lets the capture thread overwrite frames
+that inference has yet to pick up. The gesture engine translates landmarks
+into input events. Synthetic replay feeds the same engine without a camera.
 
-The compiled Vite UI is served by FastAPI on the same origin as its WebSocket.
-The project chooses one hand and one primary display to keep gesture arbitration
-and macOS coordinate mapping tractable. Vision, geometry/state, and OS output can
-be exercised independently.
+The runtime uses a lock to coordinate commands, gesture state, input events,
+and button release. A watchdog checks the Studio heartbeat and stops stalled
+camera sessions. The Studio receives state updates at up to 50 Hz. Capture
+requests 60 fps and uses the rate available from the camera. Input events follow
+fresh tracking frames.
 
-## Model asset
+FastAPI serves the compiled Vite interface and WebSocket on one loopback origin.
+The macOS app runs the same service in-process on an available loopback port
+and displays the Studio in a native WebKit window. The pointer adapter uses
+Quartz logical coordinates for the primary display, sends explicit drag events,
+and keeps the PyAutoGUI corner fail-safe enabled. Gesture recognition tracks
+one hand at a time.
 
-MediaPipe Hand Landmarker float16/1, 7,819,105 bytes.
+## Model
 
-- [Official Hand Landmarker documentation](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker?tab=Python)
-- [Official model asset](https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task)
+KineticDesk uses MediaPipe Hand Landmarker float16/1. The model file is 7,819,105
+bytes. The bootstrap verifies the file size and checksum before using the
+downloaded model. The native build bundles the verified local copy. The Git
+repository contains synthetic landmarks and source code.
+
+- [MediaPipe Hand Landmarker documentation](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker?tab=Python)
+- [Official model download](https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task)
 - SHA-256 `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1`
-
-The bootstrap verifies the stored asset on subsequent runs. The repository
-distributes source code and synthetic landmarks. It does not redistribute the model.
