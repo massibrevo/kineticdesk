@@ -21,9 +21,9 @@ class Profile(BaseModel):
     @model_validator(mode="after")
     def validate_ranges(self):
         if min(self.x_max - self.x_min, self.y_max - self.y_min) < .14:
-            raise ValueError("L’area attiva è troppo piccola")
+            raise ValueError("The tracking area is too small")
         if self.pinch_out - self.pinch_in < .035:
-            raise ValueError("La soglia di apertura deve superare quella di chiusura")
+            raise ValueError("The open-pinch threshold must exceed the closed-pinch threshold")
         return self
 
 
@@ -112,7 +112,7 @@ class GestureEngine:
     SCAN = .55
     PAUSE = .175
     DRAG_LOST = .11
-    LOST = .45
+    LOST = .75
     IDLE = 45.
     DEBOUNCE = .055
     RELEASE = .027

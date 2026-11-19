@@ -12,6 +12,8 @@ analysis = Analysis(
         (str(root / "frontend/dist"), "studio"),
         (str(root / ".cache/models/hand_landmarker.task"), "models"),
         (str(root / "backend/kineticdesk/replay_poses.json"), "kineticdesk"),
+        (str(root / "macos/en.lproj/InfoPlist.strings"), "en.lproj"),
+        (str(root / "macos/it.lproj/InfoPlist.strings"), "it.lproj"),
     ],
     hiddenimports=[
         "uvicorn.loops.asyncio",
@@ -37,10 +39,12 @@ app = BUNDLE(
     version="0.2.0",
     info_plist={
         "CFBundleDisplayName": "KineticDesk",
-        "CFBundleVersion": "5",
+        "CFBundleVersion": "6",
         "LSMinimumSystemVersion": "13.0",
         "LSMultipleInstancesProhibited": True,
-        "NSCameraUsageDescription": "KineticDesk usa la fotocamera per seguire i gesti della mano sul Mac.",
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleLocalizations": ["en", "it"],
+        "NSCameraUsageDescription": "KineticDesk uses the camera to track hand gestures on your Mac.",
         "NSAppTransportSecurity": {
             "NSAllowsLocalNetworking": True,
             "NSExceptionDomains": {"127.0.0.1": {"NSExceptionAllowsInsecureHTTPLoads": True}},

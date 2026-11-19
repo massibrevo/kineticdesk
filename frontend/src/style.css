@@ -13,7 +13,9 @@ button.danger:hover:enabled{background:#513130}
 .shell{max-width:1840px;margin:auto}
 .shell.expanded{max-width:none}
 .expanded main{padding-inline:clamp(.75rem,3vw,3rem)}
-.expanded .top{padding-inline:clamp(.75rem,3vw,3rem)}
+.expanded .language{font:inherit;font-size:.8rem;color:#eaf5f1;background:#17211e;border:1px solid #394844;border-radius:8px;padding:.45rem .55rem;cursor:pointer}
+.language:disabled{cursor:default;opacity:.65}
+.top{padding-inline:clamp(.75rem,3vw,3rem)}
 .expanded .tracking{--camera-height:min(72vh,720px)}
 .expanded .playground{height:clamp(260px,40vh,400px)}
 .top{display:flex;align-items:center;min-height:68px;gap:2.5rem;padding:0 clamp(1rem,5vw,4.5rem);border-bottom:1px solid #26312d}

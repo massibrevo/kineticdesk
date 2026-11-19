@@ -1,13 +1,17 @@
 """Exclusive camera ownership and one-slot handoff to the detector."""
+import logging
 import sys
 import threading
 import time
 
 from .assets import MODEL
+from .errors import StudioError
 
 FIRST_FRAME_TIMEOUT = 4.0
 FRAME_TIMEOUT = .85
 TARGET_CAMERA_FPS = 60
+PREVIEW_PERIOD = 1 / 15
+logger = logging.getLogger(__name__)
 
 
 class Camera:
@@ -22,7 +26,7 @@ class Camera:
 
     def start(self):
         if not MODEL.is_file():
-            raise RuntimeError("Modello mancante. Esegui scripts/bootstrap.py.")
+            raise StudioError("model-missing")
         self.capture.start()
         self.detector.start()
 
@@ -38,6 +42,9 @@ class Camera:
     def _failed(self, error):
         if not self.done.is_set():
             self.stop()
+            if not isinstance(error, StudioError):
+                logger.exception("Camera worker failed", exc_info=error)
+                error = StudioError("camera-unavailable")
             self.on_error(self, str(error))
 
     def _capture(self):
@@ -53,7 +60,7 @@ class Camera:
                 return
             device = cv2.VideoCapture(self.profile.camera, backend)
             if not device.isOpened():
-                raise RuntimeError("Fotocamera non disponibile. Controlla dispositivo e permessi.")
+                raise StudioError("camera-unavailable")
             device.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             device.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             device.set(cv2.CAP_PROP_FPS, TARGET_CAMERA_FPS)
@@ -64,9 +71,9 @@ class Camera:
                 at = time.monotonic()
                 if not ok or frame is None or not frame.size:
                     if last_capture is None and at >= first_frame_deadline:
-                        raise RuntimeError("La fotocamera si è aperta ma non invia fotogrammi.")
+                        raise StudioError("camera-no-frames")
                     if last_capture is not None and at - last_capture >= FRAME_TIMEOUT:
-                        raise RuntimeError("Flusso fotocamera interrotto.")
+                        raise StudioError("camera-stream-lost")
                     self.done.wait(.03)
                     continue
                 last_capture = at
@@ -98,11 +105,11 @@ class Camera:
             deadline = time.monotonic() + 20
             while not self.done.is_set() and not replied.wait(.1):
                 if time.monotonic() >= deadline:
-                    raise RuntimeError("Richiesta Fotocamera scaduta. Premi Avvia per riprovare.")
+                    raise StudioError("camera-permission-timeout")
             if granted or self.done.is_set():
                 return
         if status != 3:
-            raise RuntimeError("Abilita Fotocamera per il processo di avvio in Impostazioni.")
+            raise StudioError("camera-permission-required")
 
     def _detect(self):
         try:
@@ -117,6 +124,8 @@ class Camera:
                 min_hand_detection_confidence=.58, min_tracking_confidence=.53,
             )
             last_ms = -1
+            preview = None
+            preview_at = 0.
             with mp.tasks.vision.HandLandmarker.create_from_options(options) as tracker:
                 while not self.done.is_set():
                     with self.condition:
@@ -140,11 +149,17 @@ class Camera:
                     points = [[p.x, p.y, p.z] for p in found.hand_landmarks[0]] if (
                         found.hand_landmarks
                     ) else None
-                    preview = None
-                    if self.preview:
-                        ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 68])
+                    if not self.preview:
+                        preview = None
+                    elif preview is None or at - preview_at >= PREVIEW_PERIOD:
+                        height, width = frame.shape[:2]
+                        scale = min(1., 480 / max(width, height))
+                        thumbnail = cv2.resize(frame, (round(width * scale), round(height * scale)),
+                                               interpolation=cv2.INTER_AREA)
+                        ok, jpg = cv2.imencode(".jpg", thumbnail, [cv2.IMWRITE_JPEG_QUALITY, 68])
                         if ok:
                             preview = base64.b64encode(jpg).decode("ascii")
+                            preview_at = at
                     self.on_frame(self, at, points, frame.shape[1] / frame.shape[0], preview)
         except Exception as error:
             self._failed(error)

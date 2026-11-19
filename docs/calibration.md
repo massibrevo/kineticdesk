@@ -1,28 +1,28 @@
 # Calibration and webcam check
 
-The Studio currently uses Italian labels. Use the labels in bold to find the
-controls in the app.
+These instructions use the default English labels. The **Language** selector
+switches the Studio to Italian.
 
-1. Select **Solo simulazione** (Simulation only) to start the webcam. Position
+1. Select **Simulation only** to start the webcam. Position
    the camera around eye level, use diffuse lighting, and keep your second hand
    outside the frame.
 2. Hold a fist until the progress bar fills. Point toward all four edges of
    the tracking guide. If you have to reach too far to cover the practice area,
-   stop the session and narrow the bounds in **Calibrazione** (Calibration).
+   stop the session and narrow the bounds in **Calibration**.
    Narrower bounds map less hand movement to the full output area.
 3. Try ten pointer acquisitions, ten clicks, five drag releases, and three
-   scrolls in each direction. Adjust **Pinza chiusa** (Closed pinch) or
-   **Pinza aperta** (Open pinch) if the engine misses your pinch or its release.
+   scrolls in each direction. Adjust **Closed pinch** or
+   **Open pinch** if the engine misses your pinch or its release.
    Increase the drag threshold if short clicks turn into drags. To restore
-   defaults, select **Ripristina valori** (Restore defaults), then
-   **Salva calibrazione** (Save calibration).
+   defaults, select **Restore defaults**, then
+   **Save calibration**.
 4. During separate drags, hold up an open palm, move out of view, or press
    **Esc** while the Studio has focus. In the palm trial, open all four
    fingers in one motion. Check that the button releases and the session
    pauses. Holding a fist afterward should leave the session paused.
 5. After a successful simulation, grant Accessibility permission and select
-   **Scansiona per controllare il Mac** (Scan to control the Mac). Hold your
-   index finger still until **Puntatore attivo** (Pointer active) appears.
+   **Scan to control the Mac**. Hold your
+   index finger still until **Pointer active** appears.
    Repeat the trials on the primary display with a scratch document and
    disposable draggable items. Keep the physical mouse available. Record
    failures by gesture and lighting level.

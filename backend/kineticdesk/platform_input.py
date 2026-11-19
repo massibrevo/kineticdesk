@@ -3,6 +3,8 @@ import ctypes
 import platform
 from functools import lru_cache
 
+from .errors import StudioError
+
 
 @lru_cache(maxsize=1)
 def _accessibility_check():
@@ -41,7 +43,7 @@ class MacInput:
         import Quartz as q
 
         if not accessibility_trusted():
-            raise RuntimeError("Abilita Accessibilità per il processo di avvio in Impostazioni.")
+            raise StudioError("accessibility-required")
         pyautogui.FAILSAFE = True
         self.pyautogui, self.q = pyautogui, q
         display = q.CGMainDisplayID()
@@ -55,7 +57,7 @@ class MacInput:
         q = self.q
         event = q.CGEventCreateMouseEvent(None, kind, at, q.kCGMouseButtonLeft)
         if event is None:
-            raise RuntimeError("Core Graphics non ha creato l’evento del mouse.")
+            raise StudioError("mouse-event-failed")
         q.CGEventPost(q.kCGHIDEventTap, event)
 
     def release(self):
@@ -68,16 +70,19 @@ class MacInput:
         if action.kind == "up":
             self.release()
             return
-        self.pyautogui.failSafeCheck()
+        try:
+            self.pyautogui.failSafeCheck()
+        except self.pyautogui.FailSafeException as error:
+            raise StudioError("corner-failsafe") from error
         if self.pyautogui.FAILSAFE:
             point = self._location()
             origin, size = self.bounds.origin, self.bounds.size
             at_x_edge = int(point.x - origin.x) in (0, int(size.width) - 1)
             at_y_edge = int(point.y - origin.y) in (0, int(size.height) - 1)
             if at_x_edge and at_y_edge:
-                raise self.pyautogui.FailSafeException("Angolo di emergenza del display.")
+                raise StudioError("corner-failsafe")
         if not accessibility_trusted():
-            raise RuntimeError("Il permesso Accessibilità non è più disponibile.")
+            raise StudioError("accessibility-revoked")
         if action.kind == "move":
             origin, size = self.bounds.origin, self.bounds.size
             at = (
@@ -94,5 +99,5 @@ class MacInput:
         elif action.kind == "scroll":
             event = q.CGEventCreateScrollWheelEvent(None, q.kCGScrollEventUnitLine, 1, action.amount)
             if event is None:
-                raise RuntimeError("Core Graphics non ha creato l’evento di scorrimento.")
+                raise StudioError("scroll-event-failed")
             q.CGEventPost(q.kCGHIDEventTap, event)

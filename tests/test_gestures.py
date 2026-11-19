@@ -92,19 +92,19 @@ def test_lost_hand_releases_drag_before_disarming():
     recovery = feed(engine, None, 1.71, 1.80)
     assert kinds(recovery) == ["up"] and recovery[0].interrupted
     assert engine.mode == "armed"
-    assert not feed(engine, None, 1.80, 2.12)
+    assert not feed(engine, None, 1.80, 2.41)
     assert engine.reason == "tracking-lost"
-    assert not feed(engine, "point", 2.12, 3.)
+    assert not feed(engine, "point", 2.41, 3.)
     assert engine.mode == "paused"
 
 
 def test_pointer_resumes_after_short_loss_without_jump():
     engine = ready()
     position = engine.position
-    assert not feed(engine, None, 1.05, 1.23)
+    assert not feed(engine, None, 1.05, 1.62)
     assert engine.tracking_interrupted and engine.mode == "armed"
     assert engine.position == position
-    first = feed(engine, "point", 1.23, 1.25, x=.30)
+    first = feed(engine, "point", 1.62, 1.64, x=.30)
     assert first[0].kind == "move"
     assert dist(position, (first[0].x, first[0].y)) <= .121
     assert not engine.tracking_interrupted

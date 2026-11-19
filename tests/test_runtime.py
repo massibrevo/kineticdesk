@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from kineticdesk.api import create_app
-from kineticdesk.config import load_profile, save_profile
+from kineticdesk.config import load_language, load_profile, save_profile
 from kineticdesk.gestures import Action, Profile
 from kineticdesk.replay import frame
 from kineticdesk.runtime import LEASE, Runtime
@@ -240,7 +240,60 @@ def test_camera_frame_stall_freezes_then_resumes_before_safety_pause(runtime, mo
     assert not runtime.snapshot()["trackingInterrupted"]
     assert adapter.events == ["move"]
 
-    now += .46
+    now += runtime.engine.LOST + .01
     runtime.watchdog()
     assert runtime.engine.reason == "tracking-lost"
     assert runtime.input is None
+
+
+def test_native_window_keeps_pointer_armed_in_background_but_pauses_when_hidden(
+    runtime, monkeypatch,
+):
+    runtime.native_window = True
+    owner = object()
+    runtime.connect(owner)
+    runtime.engine.mode = "dragging"
+    runtime.source = "camera"
+    adapter = FakeInput()
+    runtime.input = adapter
+    now = monotonic()
+    monkeypatch.setattr("kineticdesk.runtime.monotonic", lambda: now)
+    runtime._actions([Action(kind="down", at=now)])
+    runtime.handle(owner, {"command": "tab-hidden"})
+    assert adapter.events == ["down"]
+
+    for _ in range(10):
+        now = runtime.lease + .35
+        runtime.last_frame = runtime.engine.last_seen = now
+        runtime.engine.last_active = now
+        runtime.pulse_native_window()
+        runtime.watchdog()
+        assert runtime.input is adapter
+    runtime.hide_native_window()
+    assert runtime.engine.reason == "window-hidden"
+    assert adapter.events == ["down", "up"]
+    assert runtime.input is None
+
+
+def test_studio_language_is_persisted_without_resuming_input(runtime):
+    owner = object()
+    assert load_language() == "en"
+    runtime.connect(owner)
+    runtime.handle(owner, {"command": "language", "language": "it"})
+    assert runtime.snapshot()["language"] == load_language() == "it"
+    runtime.handle(owner, {"command": "language", "language": "unknown"})
+    assert runtime.snapshot()["language"] == "it"
+    assert runtime.input is None
+
+
+def test_expired_studio_cannot_reclaim_or_stop_a_new_connection(runtime, monkeypatch):
+    old, new = object(), object()
+    assert runtime.connect(old)
+    now = runtime.lease + LEASE + .1
+    monkeypatch.setattr("kineticdesk.runtime.monotonic", lambda: now)
+    runtime.handle(old, {"command": "heartbeat"})
+    assert runtime.connect(new)
+    assert runtime.snapshot_for(old) is None
+    runtime.disconnect(old)
+    assert runtime.snapshot_for(new)["source"] == "off"
+    assert runtime.engine.reason == "ui-timeout"

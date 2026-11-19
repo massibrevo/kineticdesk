@@ -2,7 +2,7 @@
 
 The camera starts only when you request a scan or webcam simulation. Frames,
 landmarks, and performance counters stay in memory. The app writes your
-calibration profile to disk. KineticDesk uses local processing without a
+calibration profile and language preference to disk. KineticDesk uses local processing without a
 microphone, screen capture, accounts, analytics, or runtime model downloads.
 
 A desktop scan opens the camera preview. In simulation, you can show the preview

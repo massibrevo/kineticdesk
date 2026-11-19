@@ -23,7 +23,15 @@ from AppKit import (
     NSWindowStyleMaskTitled,
 )
 from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
-from Foundation import NSObject, NSTimer, NSURL, NSURLRequest, NSUserDefaults
+from Foundation import (
+    NSObject,
+    NSRunLoop,
+    NSRunLoopCommonModes,
+    NSTimer,
+    NSURL,
+    NSURLRequest,
+    NSUserDefaults,
+)
 from PyObjCTools import AppHelper
 from WebKit import (
     WKWebView,
@@ -32,6 +40,7 @@ from WebKit import (
 )
 
 from kineticdesk.api import create_app
+from kineticdesk.config import load_language
 from kineticdesk.runtime import Runtime
 
 ACCESSIBILITY_OFFERED_KEY = "KineticDeskAccessibilityOffered"
@@ -40,8 +49,31 @@ ACCESSIBILITY_SETTINGS = (
 )
 
 
+NATIVE_COPY = {
+    "en": {
+        "loading": "Starting KineticDesk…",
+        "access": "Open Accessibility…",
+        "pause": "Pause Desktop Control",
+        "hide": "Hide KineticDesk",
+        "quit": "Quit KineticDesk",
+        "launch_failed": "KineticDesk couldn't start",
+        "restart": "Quit and reopen the app to restart its local service.",
+    },
+    "it": {
+        "loading": "Avvio di KineticDesk…",
+        "access": "Apri Accessibilità…",
+        "pause": "Metti in pausa il controllo desktop",
+        "hide": "Nascondi KineticDesk",
+        "quit": "Esci da KineticDesk",
+        "launch_failed": "Impossibile avviare KineticDesk",
+        "restart": "Chiudi e riapri l’app per riavviare il servizio locale.",
+    },
+}
+
+
 class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelegate")]):
     def applicationDidFinishLaunching_(self, _notification):
+        self.language = load_language()
         self.installMenu()
         frame = NSMakeRect(0, 0, 1220, 850)
         style = (
@@ -54,9 +86,10 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         self.window.setTitle_("KineticDesk")
         self.window.setReleasedWhenClosed_(False)
         self.window.setRestorable_(False)
+        self.window.setDelegate_(self)
         self.window.center()
 
-        loading = NSTextField.labelWithString_("Avvio di KineticDesk…")
+        loading = NSTextField.labelWithString_(NATIVE_COPY[self.language]["loading"])
         loading.setFrame_(NSMakeRect(24, 790, 350, 24))
         self.window.contentView().addSubview_(loading)
         self.window.makeKeyAndOrderFront_(None)
@@ -67,6 +100,7 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         self.thread = None
         self.listener = None
         self.poller = None
+        self.lifecycle_timer = None
         try:
             self.listener = socket.socket()
             self.listener.bind(("127.0.0.1", 0))
@@ -75,6 +109,8 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
             self.runtime = Runtime(
                 open_accessibility=self.queueAccessibility,
                 accessibility_offered=self.defaults.boolForKey_(ACCESSIBILITY_OFFERED_KEY),
+                native_window=True,
+                language_changed=self.queueLanguageChange,
             )
             if self.runtime.device["accessibility"]:
                 self.rememberAccessibilityOffer()
@@ -83,6 +119,7 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
                 host="127.0.0.1", port=self.port, loop="asyncio",
                 http="h11", ws="websockets", lifespan="on", ws_max_size=4096,
                 timeout_graceful_shutdown=2, access_log=False,
+                ws_ping_interval=2, ws_ping_timeout=2,
             ))
             self.thread = Thread(
                 target=self.server.run,
@@ -95,6 +132,10 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         self.poller = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             .05, self, "loadWhenReady:", None, True,
         )
+        self.lifecycle_timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(
+            .35, self, "pulseStudio:", None, True,
+        )
+        NSRunLoop.mainRunLoop().addTimer_forMode_(self.lifecycle_timer, NSRunLoopCommonModes)
 
     @objc.python_method
     def installMenu(self):
@@ -102,14 +143,47 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         app_item = NSMenuItem.alloc().init()
         menu.addItem_(app_item)
         app_menu = NSMenu.alloc().initWithTitle_("KineticDesk")
+        copy = NATIVE_COPY[self.language]
         access = app_menu.addItemWithTitle_action_keyEquivalent_(
-            "Autorizza Accessibilità…", "requestAccessibility:", "",
+            copy["access"], "requestAccessibility:", "",
         )
         access.setTarget_(self)
+        pause = app_menu.addItemWithTitle_action_keyEquivalent_(
+            copy["pause"], "pauseDesktop:", "",
+        )
+        pause.setTarget_(self)
         app_menu.addItem_(NSMenuItem.separatorItem())
-        app_menu.addItemWithTitle_action_keyEquivalent_("Esci da KineticDesk", "terminate:", "q")
+        app_menu.addItemWithTitle_action_keyEquivalent_(copy["hide"], "hide:", "h")
+        app_menu.addItemWithTitle_action_keyEquivalent_(copy["quit"], "terminate:", "q")
         app_item.setSubmenu_(app_menu)
         NSApp.setMainMenu_(menu)
+
+    def pulseStudio_(self, _timer):
+        self.runtime.pulse_native_window()
+
+    def pauseDesktop_(self, _sender):
+        if self.runtime is not None:
+            self.runtime.pause_desktop()
+
+    def applicationDidHide_(self, _notification):
+        if self.runtime is not None:
+            self.runtime.hide_native_window()
+
+    def windowDidMiniaturize_(self, _notification):
+        self.applicationDidHide_(_notification)
+
+    def webViewWebContentProcessDidTerminate_(self, web):
+        self.runtime.discard_studio()
+        web.reload()
+
+    @objc.python_method
+    def queueLanguageChange(self, language):
+        AppHelper.callAfter(self.changeLanguage, language)
+
+    @objc.python_method
+    def changeLanguage(self, language):
+        self.language = language
+        self.installMenu()
 
     @objc.python_method
     def queueAccessibility(self):
@@ -155,10 +229,9 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
     @objc.python_method
     def showLaunchError(self, details=None):
         alert = NSAlert.alloc().init()
-        alert.setMessageText_("Impossibile avviare KineticDesk")
-        alert.setInformativeText_(
-            details or "Chiudi e riapri l’app per riavviare il servizio locale.",
-        )
+        copy = NATIVE_COPY[self.language]
+        alert.setMessageText_(copy["launch_failed"])
+        alert.setInformativeText_(details or copy["restart"])
         alert.runModal()
         NSApp.terminate_(None)
 
@@ -171,6 +244,8 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
     def applicationWillTerminate_(self, _notification):
         if self.poller is not None:
             self.poller.invalidate()
+        if self.lifecycle_timer is not None:
+            self.lifecycle_timer.invalidate()
         if self.runtime is not None:
             self.runtime.stop("shutdown")
         if self.server is not None:

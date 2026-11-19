@@ -1,6 +1,5 @@
 """Single-origin UI and authenticated local command/telemetry channel."""
 import asyncio
-import contextlib
 import json
 import os
 import secrets
@@ -26,7 +25,7 @@ def create_app(port=5174, runtime=None):
     host = f"127.0.0.1:{port}"
     origin = f"http://{host}"
 
-    # Independent of asyncio, so a slow or disconnected browser cannot extend the input lease.
+    # Keep the input watchdog independent of both the Studio UI and asyncio.
     @asynccontextmanager
     async def lifespan(_app):
         from threading import Event, Thread
@@ -67,7 +66,7 @@ def create_app(port=5174, runtime=None):
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "device": runtime.device}
+        return runtime.health()
 
     @app.get("/api/session")
     def session(request: Request):
@@ -75,10 +74,32 @@ def create_app(port=5174, runtime=None):
             return JSONResponse({"error": "invalid-site"}, status_code=403)
         return {"token": token}
 
-    async def send_snapshots(ws):
+    async def send_snapshots(ws, owner):
+        last_preview = object()
         while True:
-            await ws.send_json(await asyncio.to_thread(runtime.snapshot))
-            await asyncio.sleep(1 / 50)
+            snapshot = await asyncio.to_thread(runtime.snapshot_for, owner)
+            if snapshot is None:
+                await ws.close(code=1011, reason="lease-expired")
+                return
+            preview = snapshot["preview"]
+            if preview == last_preview:
+                del snapshot["preview"]
+            else:
+                last_preview = preview
+            await ws.send_json(snapshot)
+            await asyncio.sleep(1 / 30)
+
+    async def receive_commands(ws, owner):
+        while True:
+            raw = await ws.receive_text()
+            if len(raw) > 4096:
+                await ws.close(code=1009)
+                return
+            message = json.loads(raw)
+            if not isinstance(message, dict):
+                await ws.close(code=1008)
+                return
+            await asyncio.to_thread(runtime.handle, owner, message)
 
     @app.websocket("/ws")
     async def socket(ws: WebSocket):
@@ -87,34 +108,30 @@ def create_app(port=5174, runtime=None):
             return
         await ws.accept()
         owner = object()
-        stream = None
+        tasks = []
         try:
             login = await asyncio.wait_for(ws.receive_text(), timeout=3)
             if len(login) > 128 or not secrets.compare_digest(login.encode(), token.encode()):
                 await ws.close(code=1008)
                 return
             if not runtime.connect(owner):
-                await ws.close(code=1008, reason="Uno Studio è già collegato.")
+                await ws.close(code=1008, reason="studio-in-use")
                 return
-            stream = asyncio.create_task(send_snapshots(ws))
-            while True:
-                raw = await ws.receive_text()
-                if len(raw) > 4096:
-                    await ws.close(code=1009)
-                    return
-                message = json.loads(raw)
-                if not isinstance(message, dict):
-                    await ws.close(code=1008)
-                    return
-                await asyncio.to_thread(runtime.handle, owner, message)
-        except (WebSocketDisconnect, asyncio.TimeoutError, ValueError):
+            tasks = [
+                asyncio.create_task(send_snapshots(ws, owner)),
+                asyncio.create_task(receive_commands(ws, owner)),
+            ]
+            completed, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in completed:
+                task.result()
+        except (WebSocketDisconnect, asyncio.TimeoutError, ValueError, RuntimeError):
             pass
         finally:
             await asyncio.to_thread(runtime.disconnect, owner)
-            if stream:
-                stream.cancel()
-                with contextlib.suppress(asyncio.CancelledError, WebSocketDisconnect, RuntimeError):
-                    await stream
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     @app.get("/")
     def studio():

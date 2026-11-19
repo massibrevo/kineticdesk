@@ -1,10 +1,14 @@
 """Serialize gesture actions, consent, camera changes and emergency release."""
+import logging
 from collections import deque
 from threading import RLock
 from time import monotonic
 
+from pydantic import ValidationError
+
 from .camera import FRAME_TIMEOUT, Camera
-from .config import load_profile, save_profile
+from .config import LANGUAGES, load_language, load_profile, save_language, save_profile
+from .errors import StudioError
 from .gestures import GestureEngine, Hand, Profile
 from .platform_input import MacInput, capabilities
 from .replay import demo
@@ -12,14 +16,19 @@ from .replay import demo
 LEASE = 2.5
 FRAME_FRESHNESS = .10
 CAMERA_START_TIMEOUT = 25.
+logger = logging.getLogger(__name__)
 
 
 class Runtime:
     def __init__(
         self, input_factory=MacInput, *, open_accessibility=None, accessibility_offered=False,
+        native_window=False, language_changed=None,
     ):
         self.lock = RLock()
         self.profile = load_profile()
+        self.language = load_language()
+        self.native_window = native_window
+        self.language_changed = language_changed
         self.defaults = Profile().model_dump()
         self.engine = GestureEngine(self.profile)
         self.input_factory = input_factory
@@ -46,6 +55,26 @@ class Runtime:
         self.demo_started = None
         self.device = capabilities()
 
+    def health(self):
+        with self.lock:
+            return {"status": "ok", "device": self.device, "source": self.source,
+                    "mode": self.engine.mode, "reason": self.engine.reason}
+
+    def pulse_native_window(self):
+        with self.lock:
+            if self.native_window and self.owner is not None:
+                self._renew_lease(monotonic())
+
+    def pause_desktop(self):
+        with self.lock:
+            if self._output_available() or self._scanning():
+                self._pause("ui-pause")
+
+    def hide_native_window(self):
+        with self.lock:
+            if self.native_window and (self._output_available() or self._scanning()):
+                self._pause("window-hidden")
+
     def refresh_permissions(self):
         with self.lock:
             self.device = capabilities()
@@ -67,17 +96,36 @@ class Runtime:
 
     def connect(self, owner):
         with self.lock:
+            now = monotonic()
             if self.owner is not None:
-                return False
+                if now - self.lease < LEASE:
+                    return False
+                self.discard_studio("ui-timeout")
             self.owner = owner
-            self.lease = monotonic()
+            self.lease = now
             return True
+
+    def discard_studio(self, reason="ui-disconnected"):
+        with self.lock:
+            self.stop(reason)
+            self.owner = None
 
     def disconnect(self, owner):
         with self.lock:
             if owner is self.owner:
-                self.stop("ui-disconnected")
-                self.owner = None
+                self.discard_studio()
+
+    def _renew_lease(self, now):
+        if now - self.lease >= LEASE:
+            self.discard_studio("ui-timeout")
+        else:
+            self.lease = now
+
+    def snapshot_for(self, owner):
+        with self.lock:
+            if owner is self.owner:
+                return self.snapshot()
+            return None
 
     def _actions(self, actions, frame_at=None):
         for action in actions:
@@ -87,7 +135,7 @@ class Runtime:
                     self.input.apply(action)
                     injected = True
                 except Exception as error:
-                    self.error = str(error)
+                    self._report_error(error)
                     self._release()
                     self.engine.reset(monotonic(), "paused", "input-error")
                     return
@@ -103,9 +151,18 @@ class Runtime:
         try:
             self.input.release()
         except Exception as error:
-            self.error = str(error)
+            self._report_error(error)
             return
         self.input = None
+
+    def _report_error(self, error):
+        if isinstance(error, StudioError):
+            self.error = str(error)
+        elif isinstance(error, ValidationError):
+            self.error = "invalid-profile"
+        else:
+            self.error = "operation-failed"
+            logger.exception("KineticDesk operation failed", exc_info=error)
 
     def _output_available(self):
         return self.input is not None and self.engine.mode in (
@@ -135,7 +192,7 @@ class Runtime:
     def _new_source(self, source):
         self.stop("source-change")
         if self.input is not None:
-            raise RuntimeError("Il rilascio del pulsante è ancora in sospeso.")
+            raise StudioError("mouse-release-pending")
         self.error = None
         self.frames.clear()
         self.latencies.clear()
@@ -152,12 +209,13 @@ class Runtime:
             command = message.get("command")
             now = monotonic()
             if command == "heartbeat":
-                self.lease = now
+                if not self.native_window:
+                    self._renew_lease(now)
                 return
             try:
                 self._command(command, message, now)
             except Exception as error:
-                self.error = str(error)
+                self._report_error(error)
 
     def _command(self, command, message, now):
         if command == "stop":
@@ -165,8 +223,18 @@ class Runtime:
         elif command == "pause":
             self._pause("ui-pause")
         elif command == "tab-hidden":
-            if self._output_available() or self._scanning():
+            if not self.native_window and (self._output_available() or self._scanning()):
                 self._pause("tab-hidden")
+        elif command == "language":
+            language = message.get("language")
+            if language in LANGUAGES and language != self.language:
+                try:
+                    save_language(language)
+                except OSError as error:
+                    raise StudioError("language-save-failed") from error
+                self.language = language
+                if self.language_changed is not None:
+                    self.language_changed(language)
         elif command in ("permissions", "open-accessibility"):
             self.refresh_permissions()
             if command == "open-accessibility":
@@ -174,13 +242,13 @@ class Runtime:
         elif command in ("camera", "scan"):
             if command == "scan":
                 if now - self.lease >= LEASE:
-                    raise RuntimeError("La connessione con lo Studio non è attiva.")
+                    raise StudioError("studio-connection-lost")
                 self.refresh_permissions()
                 if not self.device["accessibility"]:
                     if self.open_accessibility is not None:
                         self._request_accessibility()
                         return
-                    raise RuntimeError("Concedi Accessibilità al processo di avvio in Impostazioni.")
+                    raise StudioError("accessibility-required")
                 if self._output_available() or self._scanning():
                     return
             if self.camera is None:
@@ -188,7 +256,7 @@ class Runtime:
             if command == "scan":
                 self._pause("scan")
                 if self.input is not None:
-                    raise RuntimeError("Il rilascio del pulsante è ancora in sospeso.")
+                    raise StudioError("mouse-release-pending")
                 self.camera.preview = True
                 self.engine.begin(now, "scan", arm_pose="point")
                 self.error = None
@@ -206,7 +274,7 @@ class Runtime:
                 self.error = None
         elif command == "profile":
             if self.source != "off":
-                raise RuntimeError("Ferma la sorgente prima di salvare la calibrazione.")
+                raise StudioError("profile-source-active")
             profile = Profile.model_validate(message.get("profile"))
             save_profile(profile)
             self.profile = profile
@@ -215,7 +283,7 @@ class Runtime:
 
     def _start_camera(self):
         if self.retiring is not None and self.retiring.alive:
-            raise RuntimeError("La fotocamera si sta chiudendo. Riprova tra un istante.")
+            raise StudioError("camera-closing")
         self.device = capabilities()
         self._new_source("camera")
         camera = Camera(self.profile, self._frame, self._camera_error)
@@ -241,7 +309,7 @@ class Runtime:
             if camera is not self.camera or now - at > .18:
                 return
             if now - self.lease >= LEASE:
-                self.stop("ui-timeout")
+                self.discard_studio("ui-timeout")
                 return
             if self.last_frame is None:
                 self.device = capabilities()
@@ -260,7 +328,7 @@ class Runtime:
             try:
                 self.input = self.input_factory()
             except Exception as error:
-                self.error = str(error)
+                self._report_error(error)
                 self._pause("input-error")
                 return
         self._actions(actions, at)
@@ -272,10 +340,10 @@ class Runtime:
             now = monotonic()
             if self.input is not None and not self._output_available():
                 self._release()
-            if self.source == "off":
+            if self.owner is not None and now - self.lease >= LEASE:
+                self.discard_studio("ui-timeout")
                 return
-            if now - self.lease >= LEASE:
-                self.stop("ui-timeout")
+            if self.source == "off":
                 return
             if self.demo_started is not None:
                 elapsed = now - self.demo_started
@@ -287,10 +355,10 @@ class Runtime:
             elif self.source == "camera":
                 if self.last_frame is not None and now - self.last_frame > FRAME_TIMEOUT:
                     self.stop("camera-stalled")
-                    self.error = "La fotocamera ha smesso di inviare fotogrammi."
+                    self.error = "camera-stream-lost"
                 elif self.last_frame is None and now - self.source_started > CAMERA_START_TIMEOUT:
                     self.stop("camera-stalled")
-                    self.error = "La fotocamera non ha risposto in tempo."
+                    self.error = "camera-start-timeout"
                 elif self.last_frame is not None and now - self.last_frame > FRAME_FRESHNESS:
                     self._actions(self.engine.tick(now, None))
                     if self.engine.mode == "paused":
@@ -304,6 +372,7 @@ class Runtime:
             latency = sorted(self.latencies)
             return {
                 "source": self.source, "mode": self.engine.mode, "reason": self.engine.reason,
+                "language": self.language, "nativeWindow": self.native_window,
                 "desktop": self._output_available(), "position": self.engine.position,
                 "pose": self.engine.pose, "armProgress": self.engine.arm_progress(now),
                 "scanning": self._scanning(),

@@ -42,24 +42,24 @@ setup.
 
 ## Try the gestures
 
-The Studio currently uses Italian interface labels. Choose **Demo dei gesti**
-(Gesture demo) to run a synthetic sequence or **Solo simulazione** (Simulation
-only) to practice with your webcam. Select **Mostra anteprima** (Show preview)
-to check the framing or **Espandi Studio** (Expand Studio) to enlarge the
-workspace. The default tracking area covers 80% of each frame dimension.
-A saved calibration overrides these defaults.
+The Studio opens in English. Use the **Language** selector to switch to
+**Italiano**. KineticDesk saves your choice.
 
-Select **Avvia scansione e controllo del Mac** (Start scan and control the Mac).
-If the native app needs Accessibility permission on your first scan attempt,
-it opens the macOS permission pane once. Enable KineticDesk, return to the app,
-and start the scan again. To reopen the pane, select **Apri Accessibilità**
-(Open Accessibility) in the Studio.
-When running from source, grant permission to the launcher in **System Settings →
-Privacy & Security → Accessibility**.
+Choose **Gesture demo** to run a synthetic sequence or **Simulation only** to
+practice with your webcam. Use **Show preview** to check the framing and
+**Expand Studio** to enlarge the workspace. The default tracking area covers
+80% of each frame dimension. A saved calibration overrides these defaults.
+
+Select **Start scan and control the Mac**. If the native app needs Accessibility
+permission on your first scan attempt, it opens the macOS permission pane once.
+Enable KineticDesk, return to the app, and start the scan again. To reopen the
+pane, select **Open Accessibility** in the Studio. When running from source,
+grant permission to the launcher in **System Settings → Privacy & Security →
+Accessibility**.
 
 Show one hand and hold your index finger up until the progress bar fills.
-When you see **Puntatore attivo** (Pointer active), move your hand to steer the
-pointer. Choose **Torna alla simulazione** (Return to simulation) to practice
+When you see **Pointer active**, move your hand to steer the
+pointer. Choose **Return to simulation** to practice
 without sending input to macOS.
 
 | Gesture | Action |
@@ -72,7 +72,10 @@ without sending input to macOS.
 | Hold up an open palm | Pauses control. Start a new scan to resume. |
 
 **Esc** pauses control while the Studio has focus. **Stop** also turns off the
-camera. Hiding the Studio pauses desktop control. Moving the physical pointer
+camera. On macOS, switching to another app leaves control running. Hiding or
+minimizing KineticDesk pauses it. In a browser, hiding the Studio tab pauses
+control. After a real connection loss, the Studio reconnects and waits for a
+new scan. Moving the physical pointer
 into a corner of the main display triggers the fail-safe on the next input
 action. Quit the native app with **⌘Q** or press **Ctrl+C** in the terminal if
 you launched from source.
