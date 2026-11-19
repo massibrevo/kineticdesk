@@ -13,7 +13,7 @@ type Motion = {
 }
 type Frame = {
   source: 'off' | 'camera' | 'replay'; mode: string; reason: string; desktop: boolean;
-  position: [number, number]; pose: string; armProgress: number; points: number[][] | null;
+  position: [number, number]; scanning: boolean; pose: string; armProgress: number; points: number[][] | null;
   aspect: number; preview: string | null; previewEnabled: boolean; events: Motion[];
   device: {platform: string; accessibility: boolean; camera: string}; error: string | null;
   profile: Profile; defaults: Profile; fps: number | null; frameAge: number | null;
@@ -28,7 +28,7 @@ const modes: Record<string, string> = {
 }
 const reasons: Record<string, string> = {
   palm: 'Palmo rilevato', 'tracking-lost': 'Mano persa', idle: 'Inattività',
-  'ui-pause': 'Pausa manuale', 'input-error': 'Errore di input',
+  'ui-pause': 'Pausa manuale', 'tab-hidden': 'Scheda nascosta', 'input-error': 'Errore di input',
   'camera-error': 'Errore della fotocamera', 'camera-stalled': 'Fotocamera interrotta',
   'ui-timeout': 'Connessione allo Studio scaduta',
 }
@@ -41,8 +41,8 @@ const permissions: Record<string, string> = {
   'not-requested': 'Da richiedere', unknown: 'Sconosciuta',
 }
 const gestures = [
-  ['Arma', 'Tieni il pugno chiuso per 750 ms.'],
-  ['Muovi', 'Punta l’indice e ripiega le altre dita.'],
+  ['Scansiona', 'Per controllare il Mac, tieni fermo l’indice durante la scansione. In simulazione chiudi il pugno.'],
+  ['Muovi', 'Distendi l’indice verso l’alto e ripiega le altre dita.'],
   ['Clic', 'Dalla posizione di puntamento, unisci pollice e indice, poi rilasciali.'],
   ['Trascina', 'Tieni la pinza, muovi la mano e apri le dita per rilasciare.'],
   ['Scorri', 'Estendi indice e medio, poi muovili in verticale.'],
@@ -103,7 +103,7 @@ function useStudio() {
       if (event.key === 'Escape' && !event.defaultPrevented) send('pause')
     }
     function visibility() {
-      if (document.hidden) send('pause')
+      if (document.hidden) send('tab-hidden')
     }
     window.addEventListener('keydown', emergency)
     document.addEventListener('visibilitychange', visibility)
@@ -141,6 +141,7 @@ function Tracking({ frame }: { frame: Frame | null }) {
     })
   }, [frame, aspect])
   const p = frame?.profile
+  const starting = frame?.source === 'camera' && frame.frameAge == null
   return <div className="tracking" style={{ aspectRatio: aspect, '--camera-ratio': aspect } as CSSProperties}>
     {frame?.preview && <img alt="Anteprima locale della fotocamera" src={'data:image/jpeg;base64,' + frame.preview}/>}
     {p && <div className="bounds" aria-hidden="true" style={{
@@ -148,9 +149,15 @@ function Tracking({ frame }: { frame: Frame | null }) {
       width: (p.x_max - p.x_min) * 100 + '%', height: (p.y_max - p.y_min) * 100 + '%',
     }}/>}
     <canvas ref={canvas} width={640} height={Math.round(640 / aspect)} aria-label="Landmark della mano"/>
-    {!frame?.points && <div className="view-empty">
-      <strong>{frame?.source === 'camera' ? 'Inquadra la mano' : frame?.source === 'replay' ? 'Replay completato' : 'Fotocamera spenta'}</strong>
-      <span>{frame?.source === 'off' || !frame ? 'Avvia la fotocamera o guarda i cinque gesti in replay.' : ''}</span>
+    {frame?.scanning && frame.points && <div className="scan-line" aria-hidden="true"
+      style={{top: (12 + frame.armProgress * 76) + '%'}}/>}
+    {!frame?.points && !frame?.preview && <div className="view-empty">
+      <strong>{starting ? 'Apertura della fotocamera…' : frame?.source === 'camera' ? 'Nessuna mano rilevata' : frame?.source === 'replay' ? 'Replay completato' : 'Fotocamera spenta'}</strong>
+      <span>{starting
+        ? 'Attendo il primo fotogramma. Accetta la richiesta di macOS se compare.'
+        : frame?.source === 'camera'
+          ? 'Inquadra una mano intera e ben illuminata.'
+          : frame?.source !== 'replay' && 'Avvia la scansione della mano o guarda la demo.'}</span>
     </div>}
   </div>
 }
@@ -246,9 +253,11 @@ function App() {
   const [tab, setTab] = useState<'studio' | 'calibrazione'>('studio')
   const live = frame?.source === 'camera'
   const replay = frame?.source === 'replay'
-  const cameraLabel = frame?.frameAge == null ? 'Fotocamera in avvio' : 'Fotocamera attiva'
+  const cameraReady = live && frame.frameAge != null
+  const cameraLabel = cameraReady ? 'Fotocamera attiva' : 'Fotocamera in avvio'
   const running = !!frame && frame.source !== 'off'
-  const mode = running ? modes[frame.mode] : 'Fermo'
+  const mode = !running ? 'Fermo' : frame.scanning ? 'Scansione della mano' :
+    frame.desktop && frame.mode === 'armed' ? 'Puntatore attivo' : modes[frame.mode]
   const notable = [...(frame?.events ?? [])].reverse().filter(event => event.kind !== 'move').slice(0, 6)
   return <div className="shell">
     <header className="top">
@@ -264,12 +273,14 @@ function App() {
         <div><h1>{tab === 'studio' ? 'Studio gesti' : 'Profilo di controllo'}</h1>
         <p>Controlla il desktop con la mano. L’elaborazione avviene su questo Mac.</p></div>
         <div className="status" data-mode={running ? frame.mode : 'off'} role="status">
-          <i/>{mode}{frame?.mode === 'paused' && reasons[frame.reason] ? ' · ' + reasons[frame.reason] : ''}
+          <i/>{live && !cameraReady ? 'Avvio fotocamera' : mode}{frame?.mode === 'paused' && reasons[frame.reason] ? ' · ' + reasons[frame.reason] : ''}
         </div>
       </div>
       {frame?.error && <div className="alert" role="alert">{frame.error}</div>}
       <div className="toolbar" aria-label="Controlli della sessione">
-        <button className="primary" disabled={!frame || live} onClick={() => send('camera')}>Avvia fotocamera</button>
+        <button className="primary" disabled={!frame || frame.scanning || frame.desktop}
+          onClick={() => send('scan')}>{live ? 'Scansiona per controllare il Mac' : 'Avvia scansione e controllo del Mac'}</button>
+        <button disabled={!frame || live} onClick={() => send('camera')}>Solo simulazione</button>
         <button disabled={!frame} onClick={() => send('demo')}>{replay ? 'Ripeti la demo' : 'Demo dei gesti'}</button>
         <span className="toolbar-gap"/>
         <button disabled={!running || frame.mode === 'paused'} onClick={() => send('pause')}>Pausa <kbd>Esc</kbd></button>
@@ -281,8 +292,14 @@ function App() {
           <section className="panel monitor">
             <div className="panel-head">
               <div><h2>Tracciamento</h2><small>{live ? cameraLabel.toUpperCase() : replay ? 'REPLAY SINTETICO' : 'FOTOCAMERA SPENTA'}</small></div>
-              {live && <button aria-pressed={frame.previewEnabled} onClick={() => send('preview', {enabled: !frame.previewEnabled})}>Anteprima {frame.previewEnabled ? 'attiva' : 'spenta'}</button>}
+              {live && <button disabled={!cameraReady} onClick={() => send('preview', {enabled: !frame.previewEnabled})}>{frame.previewEnabled ? 'Nascondi anteprima' : 'Mostra anteprima'}</button>}
             </div>
+            {frame?.scanning && <div className="scan-progress">
+              <strong>{!cameraReady ? 'Apertura della fotocamera' : !frame.points ? 'Inquadra la mano' : 'Tieni fermo l’indice'}</strong>
+              <span>{!cameraReady ? 'L’anteprima locale si apre durante la scansione.' :
+                'Distendi solo l’indice verso l’alto per circa un secondo.'}</span>
+              <progress aria-label="Scansione della mano" max="1" value={frame.armProgress}/>
+            </div>}
             <Tracking frame={frame}/>
             <div className="readings">
               <div><span>Frequenza</span><strong>{frame?.fps?.toFixed(1) ?? '—'}<small> fps</small></strong></div>
@@ -291,9 +308,18 @@ function App() {
             </div>
           </section>
           <aside className="panel controls">
-            <div className="panel-head"><div><h2>Controllo desktop</h2><small>{frame?.desktop ? (frame.mode === 'ready' ? 'CONSENSO RICEVUTO · ATTESA ARMAMENTO' : 'INPUT DESKTOP ATTIVO') : 'SIMULAZIONE · DRY-RUN'}</small></div></div>
+            <div className="panel-head"><div><h2>Controllo desktop</h2>
+              <small>{frame?.desktop ? 'INPUT DESKTOP ATTIVO' : frame?.scanning ? 'SCANSIONE IN CORSO' : 'SIMULAZIONE · DRY-RUN'}</small></div></div>
             <div className="control-body">
-              {frame?.mode === 'ready' && running ? <div className="arming"><span>Chiudi il pugno per armare</span><progress aria-label="Avanzamento armamento" max="1" value={frame.armProgress}/></div> : null}
+              {cameraReady && <p className="session-hint">{frame.desktop
+                ? 'Muovi la mano con l’indice disteso per spostare il puntatore del Mac. Mostra il palmo per mettere in pausa.'
+                : frame.scanning
+                  ? 'Il puntatore si abilita appena la barra della scansione è piena.'
+                  : frame.mode === 'paused'
+                    ? 'Scansiona di nuovo la mano per riprendere il controllo del Mac.'
+                    : 'In simulazione, chiudi il pugno e poi distendi solo l’indice per muovere il cursore nell’Area prova.'}</p>}
+              {frame?.mode === 'ready' && !frame.scanning && (cameraReady || replay) &&
+                <div className="arming"><span>Tieni il pugno chiuso per 750 ms</span><progress aria-label="Avanzamento armamento" max="1" value={frame.armProgress}/></div>}
               <dl className="devices">
                 <div><dt>Fotocamera</dt><dd>{permissions[frame?.device.camera ?? 'unknown']}</dd></div>
                 <div><dt>Accessibilità</dt><dd>{frame?.device.accessibility ? 'Concessa' : 'Da concedere'}</dd></div>
@@ -301,8 +327,8 @@ function App() {
               {frame?.device.platform === 'macOS' ? <p className="permission">Gestisci i permessi in Impostazioni di Sistema → Privacy e sicurezza.</p> :
                 <p className="permission">L’input desktop è in anteprima su macOS.</p>}
               <div className="control-buttons">
-                <button className="primary" disabled={!live || frame.desktop || frame.frameAge == null} onClick={() => send('enable')}>Abilita controllo desktop</button>
-                {live && <button onClick={() => send('dry-run')}>Avvia dry-run</button>}
+                {cameraReady && (frame.desktop || frame.mode === 'paused') &&
+                  <button onClick={() => send('dry-run')}>{frame.desktop ? 'Torna alla simulazione' : 'Riprendi simulazione'}</button>}
                 <button disabled={!frame} onClick={() => send('permissions')}>Aggiorna permessi</button>
               </div>
               <div className="activity"><h3>Ultime azioni</h3>

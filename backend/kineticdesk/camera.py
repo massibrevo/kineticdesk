@@ -1,9 +1,10 @@
 """Exclusive camera ownership and one-slot handoff to the detector."""
-import os
+import sys
 import threading
 import time
 from pathlib import Path
 
+FIRST_FRAME_TIMEOUT = 4.0
 MODEL = Path(__file__).resolve().parents[2] / ".cache/models/hand_landmarker.task"
 
 
@@ -42,28 +43,32 @@ class Camera:
         try:
             import cv2
 
-            if os.name == "posix" and hasattr(cv2, "CAP_AVFOUNDATION"):
-                from sys import platform
-
-                if platform == "darwin":
-                    self._request_macos_video()
+            backend = cv2.CAP_ANY
+            if sys.platform == "darwin":
+                self._request_macos_video()
+                backend = cv2.CAP_AVFOUNDATION
             if self.done.is_set():
                 return
-            device = cv2.VideoCapture(self.profile.camera)
+            device = cv2.VideoCapture(self.profile.camera, backend)
             if not device.isOpened():
                 raise RuntimeError("Fotocamera non disponibile. Controlla dispositivo e permessi.")
             device.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             device.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             misses = 0
+            first_frame_deadline = time.monotonic() + FIRST_FRAME_TIMEOUT
+            received_frame = False
             while not self.done.is_set():
                 ok, frame = device.read()
                 at = time.monotonic()
-                if not ok:
+                if not ok or frame is None or not frame.size:
+                    if not received_frame and at >= first_frame_deadline:
+                        raise RuntimeError("La fotocamera si è aperta ma non invia fotogrammi.")
                     misses += 1
-                    if misses >= 8:
+                    if received_frame and misses >= 8:
                         raise RuntimeError("Flusso fotocamera interrotto.")
                     self.done.wait(.03)
                     continue
+                received_frame = True
                 misses = 0
                 with self.condition:
                     self.frame = at, frame

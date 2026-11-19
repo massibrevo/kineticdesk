@@ -7,8 +7,10 @@ are aspect-corrected for geometry and mirrored according to the profile.
 
 | State | Condition | Output / next state |
 | --- | --- | --- |
-| Off | Camera or replay explicitly started | Ready in dry-run |
-| Ready | Continuous fist for 750 ms | Armed, awaiting an open pointing pose |
+| Off | Simulation or replay explicitly started | Ready in dry-run |
+| Off or dry-run | Explicit scan request with Accessibility | Camera preview and desktop scan, no OS events |
+| Ready in dry-run | Continuous fist for 750 ms | Armed, awaiting an open pointing pose |
+| Desktop scan | Extended index held steady for 750 ms of fresh tracking | Create OS adapter and arm pointer control |
 | Armed | Open pointing pose for 55 ms | Cursor movement with adaptive smoothing |
 | Armed | Index/thumb distance below the close threshold immediately after pointing | Freeze the cursor and enter Pinching |
 | Pinching | Opens before 75 ms or tracking is interrupted | Cancel pending click |
@@ -19,7 +21,8 @@ are aspect-corrected for geometry and mirrored according to the profile.
 | Armed | Index and middle stable for 130 ms, with sufficient vertical displacement | Rate-limited scroll, cursor frozen |
 | Armed, Pinching, Dragging | Open palm for 140 ms, tracking gap of 200 ms, or 45 s idle | Release a held button and pause |
 | Any | Stop, UI disconnect or lease expiry, camera failure or shutdown | Release, discard consent and stop |
-| Paused | Explicit dry-run start or fresh desktop consent | Ready with fresh arming dwell |
+| Desktop scan or armed desktop | Browser tab hidden | Cancel scan or disarm and release |
+| Paused | Explicit dry-run or fresh scan | Ready with fresh arming dwell |
 
 Separate close/open thresholds suppress noise around the pinch boundary.
 Open-palm recognition preempts drag and click handling. After a click or drag,

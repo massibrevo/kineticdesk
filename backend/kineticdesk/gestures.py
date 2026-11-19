@@ -120,6 +120,8 @@ class GestureEngine:
         self.last_point = -1.
         self.pose = ""
         self.pose_since = 0.
+        self.arm_pose = "fist"
+        self.scan_anchor = None
         self.palm_since = None
         self.release_since = None
         self.scroll_y = None
@@ -133,6 +135,7 @@ class GestureEngine:
         events = [self._position_action("up", now, interrupted=True)] if self.mode == "dragging" else []
         self.mode, self.reason = mode, reason
         self.pose = ""
+        self.scan_anchor = None
         self.palm_since = self.release_since = self.scroll_y = None
         self.scroll_accum = 0.
         self.resume_gate = True
@@ -140,8 +143,14 @@ class GestureEngine:
         self.last_point = -1.
         return events
 
-    def begin(self, now, reason="consent"):
+    def begin(self, now, reason="dry-run", arm_pose="fist"):
+        self.arm_pose = arm_pose
         return self.reset(now, "ready", reason)
+
+    def arm_progress(self, now):
+        if self.mode == "ready" and self.pose == self.arm_pose:
+            return min(1., max(0., (now - self.pose_since) / self.ARM))
+        return 0.
 
     def _position_action(self, kind, now, interrupted=False):
         return Action(kind=kind, at=now, x=self.position[0], y=self.position[1],
@@ -195,15 +204,23 @@ class GestureEngine:
         if self.mode in ("pinching", "dragging"):
             return self._pinch(now, hand)
         pose = "fist" if hand.fist else "point" if hand.point else "scroll" if hand.scroll else ""
+        if self.mode == "ready" and self.arm_pose == "point":
+            if pose != "point" or hand.pinch < profile.pinch_out:
+                pose = ""
+                self.scan_anchor = None
+            elif self.pose != "point" or dist(self.scan_anchor, hand.tip) > .075:
+                self.scan_anchor = hand.tip
+                self.pose_since = now
         if pose != self.pose:
             self.pose, self.pose_since = pose, now
             self.scroll_y = None
             self.scroll_accum = 0.
         age = now - self.pose_since
         if self.mode == "ready":
-            if pose == "fist" and age >= self.ARM:
+            if pose == self.arm_pose and age >= self.ARM:
                 self.mode, self.reason = "armed", "armed"
                 self.last_active = now
+                self.resume_gate = self.arm_pose != "point"
             return []
         if self.resume_gate:
             if pose == "point" and hand.pinch >= profile.pinch_out and age >= self.POINT:

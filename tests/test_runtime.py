@@ -7,6 +7,7 @@ from starlette.websockets import WebSocketDisconnect
 from kineticdesk.api import create_app
 from kineticdesk.config import load_profile, save_profile
 from kineticdesk.gestures import Action, Profile
+from kineticdesk.replay import frame
 from kineticdesk.runtime import Runtime
 
 
@@ -66,16 +67,60 @@ def test_host_origin_token_and_single_client(runtime):
         assert runtime.source == "off"
 
 
-def test_enable_requires_camera_freshness_consent_and_arm(runtime):
+def test_scan_requires_consent_and_stable_index_before_input(runtime, monkeypatch):
+    class FakeCamera:
+        def __init__(self, *_args):
+            self.preview = False
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr("kineticdesk.runtime.Camera", FakeCamera)
     owner = object()
     runtime.connect(owner)
-    runtime.handle(owner, {"command": "enable"})
+    runtime.handle(owner, {"command": "scan"})
+    assert runtime.camera.preview and runtime.snapshot()["scanning"]
     assert runtime.input is None
-    runtime.camera = object()
-    runtime.last_frame = monotonic()
-    runtime.handle(owner, {"command": "enable"})
-    assert runtime.input is not None and runtime.engine.mode == "ready"
+
+    started = monotonic()
+    for i in range(20):
+        now = started + i / 100
+        runtime._observe(now, now, frame("point"), 4 / 3)
+    assert 0 < runtime.engine.arm_progress(now) < 1
+    assert runtime.input is None
+
+    for i in range(20, 52):
+        now = started + i / 100
+        runtime._observe(now, now, frame("point", x=.12 * (i % 2)), 4 / 3)
+    assert runtime.input is None
+
+    for i in range(52, 130):
+        now = started + i / 100
+        runtime._observe(now, now, frame("point"), 4 / 3)
+        if runtime.input is not None:
+            break
+    assert not runtime.snapshot()["scanning"]
     assert runtime.input.events == []
+    assert runtime.engine.mode == "armed"
+
+    now += .03
+    runtime._observe(now, now, frame("point", x=.08), 4 / 3)
+    assert runtime.input.events == ["move"]
+    assert runtime.snapshot()["events"][-1]["injected"]
+
+
+def test_hiding_tab_cancels_pending_scan(runtime):
+    owner = object()
+    runtime.connect(owner)
+    runtime.source = "camera"
+    runtime.engine.begin(monotonic(), "scan", arm_pose="point")
+    runtime.handle(owner, {"command": "tab-hidden"})
+    assert runtime.engine.reason == "tab-hidden"
+    assert not runtime.snapshot()["scanning"]
+    assert runtime.input is None
 
 
 @pytest.mark.parametrize("reason", ["disconnect", "timeout", "stop", "pause", "camera-stall"])
@@ -119,3 +164,20 @@ def test_input_failure_releases(runtime):
     assert adapter.events == ["down", "up"]
     assert runtime.input is None
     assert runtime.engine.reason == "input-error"
+
+
+def test_hiding_tab_keeps_dry_run_and_disarms_desktop(runtime):
+    owner = object()
+    runtime.connect(owner)
+    runtime.source = "camera"
+    runtime.handle(owner, {"command": "tab-hidden"})
+    assert runtime.engine.mode == "ready"
+
+    adapter = FakeInput()
+    runtime.input = adapter
+    runtime.engine.mode = "dragging"
+    runtime._actions([Action(kind="down", at=monotonic())])
+    runtime.handle(owner, {"command": "tab-hidden"})
+    assert adapter.events == ["down", "up"]
+    assert runtime.engine.reason == "tab-hidden"
+    assert runtime.input is None

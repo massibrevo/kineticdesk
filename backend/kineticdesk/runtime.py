@@ -88,6 +88,11 @@ class Runtime:
             "ready", "armed", "pinching", "dragging",
         )
 
+    def _scanning(self):
+        return self.source == "camera" and self.engine.mode == "ready" and (
+            self.engine.reason == "scan"
+        )
+
     def _pause(self, reason):
         self._actions(self.engine.reset(monotonic(), "paused", reason))
         self._release()
@@ -135,24 +140,29 @@ class Runtime:
             self.stop()
         elif command == "pause":
             self._pause("ui-pause")
+        elif command == "tab-hidden":
+            if self._output_available() or self._scanning():
+                self._pause("tab-hidden")
         elif command == "permissions":
             self.device = capabilities()
-        elif command == "camera":
-            if self.retiring is not None and self.retiring.alive:
-                raise RuntimeError("La fotocamera si sta chiudendo. Riprova tra un istante.")
-            if self.camera is not None:
-                return
-            self.device = capabilities()
-            self._new_source("camera")
-            camera = Camera(self.profile, self._frame, self._camera_error)
-            try:
-                camera.start()
-            except Exception:
-                camera.stop()
-                self.retiring = camera
-                self.stop("camera-error")
-                raise
-            self.camera = camera
+        elif command in ("camera", "scan"):
+            if command == "scan":
+                self.device = capabilities()
+                if not self.device["accessibility"]:
+                    raise RuntimeError("Concedi Accessibilità al processo di avvio in Impostazioni.")
+                if now - self.lease >= LEASE:
+                    raise RuntimeError("La connessione con lo Studio non è attiva.")
+                if self._output_available() or self._scanning():
+                    return
+            if self.camera is None:
+                self._start_camera()
+            if command == "scan":
+                self._pause("scan")
+                if self.input is not None:
+                    raise RuntimeError("Il rilascio del pulsante è ancora in sospeso.")
+                self.camera.preview = True
+                self.engine.begin(now, "scan", arm_pose="point")
+                self.error = None
         elif command == "demo":
             self._new_source("replay")
             self.demo_started = now
@@ -165,20 +175,6 @@ class Runtime:
             if self.input is None:
                 self.engine.begin(now, "dry-run")
                 self.error = None
-        elif command == "enable":
-            self.device = capabilities()
-            if self.camera is None or self.last_frame is None or now - self.last_frame > .22:
-                raise RuntimeError("Avvia la fotocamera e attendi il primo fotogramma.")
-            if now - self.lease >= LEASE:
-                raise RuntimeError("La connessione con lo Studio non è attiva.")
-            if not self.device["accessibility"]:
-                raise RuntimeError("Concedi Accessibilità al processo di avvio in Impostazioni.")
-            self._pause("consent")
-            if self.input is not None:
-                raise RuntimeError("Il rilascio del pulsante è ancora in sospeso.")
-            self.input = self.input_factory()
-            self.engine.begin(now, "consent")
-            self.error = None
         elif command == "profile":
             if self.source != "off":
                 raise RuntimeError("Ferma la sorgente prima di salvare la calibrazione.")
@@ -188,9 +184,25 @@ class Runtime:
             self.engine.profile = profile
             self.error = None
 
+    def _start_camera(self):
+        if self.retiring is not None and self.retiring.alive:
+            raise RuntimeError("La fotocamera si sta chiudendo. Riprova tra un istante.")
+        self.device = capabilities()
+        self._new_source("camera")
+        camera = Camera(self.profile, self._frame, self._camera_error)
+        try:
+            camera.start()
+        except Exception:
+            camera.stop()
+            self.retiring = camera
+            self.stop("camera-error")
+            raise
+        self.camera = camera
+
     def _camera_error(self, camera, message):
         with self.lock:
             if camera is self.camera:
+                self.device = capabilities()
                 self.stop("camera-error")
                 self.error = message
 
@@ -202,6 +214,8 @@ class Runtime:
             if now - self.lease >= LEASE:
                 self.stop("ui-timeout")
                 return
+            if self.last_frame is None:
+                self.device = capabilities()
             self.preview = preview if camera.preview else None
             self._observe(now, at, points, aspect)
 
@@ -211,7 +225,16 @@ class Runtime:
         self.frames.append(at)
         self.total += 1
         self.detected += hand is not None
-        self._actions(self.engine.tick(now, hand), at)
+        scanning = self._scanning()
+        actions = self.engine.tick(now, hand)
+        if scanning and self.engine.mode == "armed":
+            try:
+                self.input = self.input_factory()
+            except Exception as error:
+                self.error = str(error)
+                self._pause("input-error")
+                return
+        self._actions(actions, at)
         if self.engine.mode == "paused":
             self._release()
 
@@ -250,13 +273,11 @@ class Runtime:
             fifo = [stamp for stamp in self.frames if now - stamp <= 1.25]
             rate = (len(fifo) - 1) / (fifo[-1] - fifo[0]) if len(fifo) > 1 else None
             latency = sorted(self.latencies)
-            progress = 0.
-            if self.engine.mode == "ready" and self.engine.pose == "fist":
-                progress = min(1., (now - self.engine.pose_since) / self.engine.ARM)
             return {
                 "source": self.source, "mode": self.engine.mode, "reason": self.engine.reason,
                 "desktop": self._output_available(), "position": self.engine.position,
-                "pose": self.engine.pose, "armProgress": progress,
+                "pose": self.engine.pose, "armProgress": self.engine.arm_progress(now),
+                "scanning": self._scanning(),
                 "points": self.points, "aspect": self.aspect, "preview": self.preview,
                 "previewEnabled": self.camera is not None and self.camera.preview,
                 "events": list(self.history), "device": self.device, "error": self.error,

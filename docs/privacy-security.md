@@ -3,7 +3,8 @@
 Frames are captured only after a request from the Studio. No microphone,
 screen capture, accounts, analytics, cloud services or runtime model download
 are used. The optional JPEG preview is sent only via the authenticated loopback
-WebSocket to the connected Studio and is off when a camera session starts.
+WebSocket to the connected Studio. It starts when you explicitly request a
+desktop scan or show the preview in dry-run.
 Frames, landmarks and performance counters remain in memory. Only the calibration
 profile is written to disk.
 

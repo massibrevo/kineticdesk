@@ -15,18 +15,20 @@ python3 scripts/dev.py
 
 Apri l’indirizzo stampato dal processo, di norma `http://127.0.0.1:5173`. Se la porta è occupata, esegui `python3 scripts/dev.py --port 5174`. Il bootstrap scarica le dipendenze bloccate e il modello ufficiale. Lo Studio funziona offline dopo l’installazione.
 
-Scegli **Demo dei gesti** per riprodurre una sequenza sintetica nell’area prova. Per usare la mano, premi **Avvia fotocamera**, consenti l’accesso macOS e prova gli stessi gesti in **dry-run**. L’anteprima video è facoltativa. La sovrapposizione dei punti della mano è attiva durante il tracciamento.
+Scegli **Demo dei gesti** per riprodurre una sequenza sintetica nell’area prova.
+Con **Solo simulazione** puoi provare gli stessi gesti usando la fotocamera.
+Premi **Mostra anteprima** se vuoi controllare l’inquadratura.
 
-Per inviare input a macOS, concedi **Accessibilità** in **Impostazioni di Sistema → Privacy e sicurezza** all’app che lancia il processo. Per un avvio dal terminale, inizia con Terminale o iTerm. Se macOS attribuisce l’accesso a Python o all’app ospitante, usa il nome mostrato dal sistema. Riavvia dal terminale dopo la modifica se macOS lo richiede. Premi **Abilita controllo desktop**, poi chiudi il pugno per circa 750 ms. Torna al dry-run con **Avvia dry-run**.
+Per inviare input a macOS, concedi **Accessibilità** in **Impostazioni di Sistema → Privacy e sicurezza** all’app che lancia il processo. Per un avvio dal terminale, inizia con Terminale o iTerm. Se macOS attribuisce l’accesso a Python o all’app ospitante, usa il nome mostrato dal sistema. Riavvia dal terminale dopo la modifica se macOS lo richiede. Premi **Avvia scansione e controllo del Mac**. Consenti l’accesso alla fotocamera se macOS lo chiede. Nell’anteprima, mostra una mano, distendi solo l’indice verso l’alto e tienilo fermo finché la barra è piena. Quando lo Studio mostra **Puntatore attivo**, muovi la mano per muovere il puntatore. Usa **Torna alla simulazione** per provare senza input di sistema.
 
 | Gesto | Azione |
 | --- | --- |
-| Pugno per 750 ms | Arma la sessione. |
+| Indice disteso e fermo per circa un secondo durante la scansione | Abilita il puntatore del Mac. In simulazione, chiudi il pugno per 750 ms. |
 | Indice disteso, altre dita ripiegate | Muove il cursore. Smetti di puntare per fermarlo. |
 | Pinza breve partendo dal puntamento | Clic sinistro al rilascio. |
 | Pinza tenuta almeno 450 ms | Afferra. Muovi la mano per trascinare e apri le dita per rilasciare. |
 | Indice e medio distesi, anulare e mignolo piegati | Scorri spostando le dita in verticale. |
-| Palmo aperto | Pausa. Per riprendere il controllo desktop, concedi di nuovo il consenso nello Studio e fai il pugno. |
+| Palmo aperto | Pausa. Per riprendere il controllo desktop, avvia una nuova scansione nello Studio. |
 
 **Esc** mette in pausa quando lo Studio ha il focus. **Stop** spegne anche la fotocamera. Puoi arrestare il processo con **Ctrl+C** nel terminale da cui lo hai avviato. Un angolo del display principale attiva il fail-safe alla successiva azione di input. Quando la scheda viene nascosta, il controllo desktop va in pausa.
 
