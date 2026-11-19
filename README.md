@@ -4,7 +4,19 @@ Controllo del desktop con una webcam e una mano. KineticDesk elabora i fotogramm
 
 ![KineticDesk Studio durante il replay sintetico, con lo scheletro della mano e il riquadro trascinato](docs/studio-replay.png)
 
-## Avvio
+## App macOS
+
+Apri **KineticDesk.app** con un doppio clic dal Finder. L’app contiene il
+servizio locale, l’interfaccia e il modello. Dal menu **KineticDesk → Autorizza
+Accessibilità…** puoi aprire la richiesta di autorizzazione per il controllo
+del cursore. La fotocamera viene richiesta quando avvii una scansione o una
+simulazione.
+
+Per creare il bundle dal codice sorgente, esegui il bootstrap indicato sotto,
+poi lancia `python3 scripts/build_macos.py`. Il bundle locale viene creato in
+`.cache/macos/dist/KineticDesk.app` per l’architettura del Mac che lo costruisce.
+
+## Avvio dal codice sorgente
 
 Servono macOS, Node.js 22 e [uv](https://docs.astral.sh/uv/). In alternativa a uv, usa Python 3.11 o 3.12. Esegui dalla cartella del repository:
 

@@ -5,15 +5,14 @@ import json
 import os
 import secrets
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .assets import STUDIO
 from .runtime import Runtime
 
-DIST = Path(__file__).resolve().parents[2] / "frontend/dist"
 CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; connect-src 'self' ws://127.0.0.1:*; frame-ancestors 'none'; "
@@ -119,9 +118,9 @@ def create_app(port=5174, runtime=None):
 
     @app.get("/")
     def studio():
-        return FileResponse(DIST / "index.html")
+        return FileResponse(STUDIO / "index.html")
 
-    app.mount("/assets", StaticFiles(directory=DIST / "assets", check_dir=False))
+    app.mount("/assets", StaticFiles(directory=STUDIO / "assets", check_dir=False))
 
     return app
 

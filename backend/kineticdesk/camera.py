@@ -2,11 +2,11 @@
 import sys
 import threading
 import time
-from pathlib import Path
+
+from .assets import MODEL
 
 FIRST_FRAME_TIMEOUT = 4.0
 TARGET_CAMERA_FPS = 60
-MODEL = Path(__file__).resolve().parents[2] / ".cache/models/hand_landmarker.task"
 
 
 class Camera:
