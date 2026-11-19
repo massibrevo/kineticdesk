@@ -15,12 +15,14 @@ CAMERA_START_TIMEOUT = 25.
 
 
 class Runtime:
-    def __init__(self, input_factory=MacInput):
+    def __init__(self, input_factory=MacInput, *, open_accessibility=None):
         self.lock = RLock()
         self.profile = load_profile()
         self.defaults = Profile().model_dump()
         self.engine = GestureEngine(self.profile)
         self.input_factory = input_factory
+        self.open_accessibility = open_accessibility
+        self.awaiting_accessibility = False
         self.input = None
         self.owner = None
         self.lease = 0.
@@ -40,6 +42,19 @@ class Runtime:
         self.detected = self.total = 0
         self.demo_started = None
         self.device = capabilities()
+
+    def refresh_permissions(self):
+        with self.lock:
+            self.device = capabilities()
+            if self.device["accessibility"]:
+                self.awaiting_accessibility = False
+
+    def _request_accessibility(self):
+        if self.open_accessibility is None or self.device["accessibility"]:
+            return
+        self.open_accessibility()
+        self.awaiting_accessibility = True
+        self.error = None
 
     def connect(self, owner):
         with self.lock:
@@ -143,15 +158,20 @@ class Runtime:
         elif command == "tab-hidden":
             if self._output_available() or self._scanning():
                 self._pause("tab-hidden")
-        elif command == "permissions":
-            self.device = capabilities()
+        elif command in ("permissions", "open-accessibility"):
+            self.refresh_permissions()
+            if command == "open-accessibility":
+                self._request_accessibility()
         elif command in ("camera", "scan"):
             if command == "scan":
-                self.device = capabilities()
-                if not self.device["accessibility"]:
-                    raise RuntimeError("Concedi Accessibilità al processo di avvio in Impostazioni.")
                 if now - self.lease >= LEASE:
                     raise RuntimeError("La connessione con lo Studio non è attiva.")
+                self.refresh_permissions()
+                if not self.device["accessibility"]:
+                    if self.open_accessibility is not None:
+                        self._request_accessibility()
+                        return
+                    raise RuntimeError("Concedi Accessibilità al processo di avvio in Impostazioni.")
                 if self._output_available() or self._scanning():
                     return
             if self.camera is None:
@@ -281,6 +301,8 @@ class Runtime:
                 "points": self.points, "aspect": self.aspect, "preview": self.preview,
                 "previewEnabled": self.camera is not None and self.camera.preview,
                 "events": list(self.history), "device": self.device, "error": self.error,
+                "canOpenAccessibility": self.open_accessibility is not None,
+                "awaitingAccessibility": self.awaiting_accessibility,
                 "profile": self.profile.model_dump(), "defaults": self.defaults, "fps": rate,
                 "frameAge": (now - self.last_frame) * 1000 if self.last_frame is not None else None,
                 "tracking": self.detected / self.total if self.total else None,

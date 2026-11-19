@@ -16,6 +16,7 @@ from AppKit import (
     NSMenuItem,
     NSTextField,
     NSWindow,
+    NSWorkspace,
     NSWindowStyleMaskClosable,
     NSWindowStyleMaskMiniaturizable,
     NSWindowStyleMaskResizable,
@@ -23,6 +24,7 @@ from AppKit import (
 )
 from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
 from Foundation import NSObject, NSTimer, NSURL, NSURLRequest
+from PyObjCTools import AppHelper
 from WebKit import (
     WKWebView,
     WKWebViewConfiguration,
@@ -31,6 +33,10 @@ from WebKit import (
 
 from kineticdesk.api import create_app
 from kineticdesk.runtime import Runtime
+
+ACCESSIBILITY_SETTINGS = (
+    "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility"
+)
 
 
 class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelegate")]):
@@ -64,7 +70,7 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
             self.listener = socket.socket()
             self.listener.bind(("127.0.0.1", 0))
             self.port = self.listener.getsockname()[1]
-            self.runtime = Runtime()
+            self.runtime = Runtime(open_accessibility=self.queueAccessibility)
             self.server = uvicorn.Server(uvicorn.Config(
                 create_app(self.port, self.runtime),
                 host="127.0.0.1", port=self.port, loop="asyncio",
@@ -98,11 +104,22 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         app_item.setSubmenu_(app_menu)
         NSApp.setMainMenu_(menu)
 
+    @objc.python_method
+    def queueAccessibility(self):
+        AppHelper.callAfter(self.requestAccessibility_, None)
+
     def requestAccessibility_(self, _sender):
+        # Ask macOS to register this app before opening the permission pane.
         trusted = AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
-        if trusted and self.runtime is not None:
-            with self.runtime.lock:
-                self.runtime.device = self.runtime.device | {"accessibility": True}
+        if not trusted:
+            NSWorkspace.sharedWorkspace().openURL_(NSURL.URLWithString_(ACCESSIBILITY_SETTINGS))
+        if self.runtime is not None:
+            self.runtime.refresh_permissions()
+
+    def applicationDidBecomeActive_(self, _notification):
+        runtime = getattr(self, "runtime", None)
+        if runtime is not None:
+            runtime.refresh_permissions()
 
     def loadWhenReady_(self, timer):
         if self.server.started:

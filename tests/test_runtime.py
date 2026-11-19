@@ -181,3 +181,27 @@ def test_hiding_tab_keeps_dry_run_and_disarms_desktop(runtime):
     assert adapter.events == ["down", "up"]
     assert runtime.engine.reason == "tab-hidden"
     assert runtime.input is None
+
+
+def test_missing_accessibility_opens_native_pane_without_starting_scan(runtime, monkeypatch):
+    opened = []
+    runtime.open_accessibility = lambda: opened.append(True)
+    denied = runtime.device | {"accessibility": False}
+    monkeypatch.setattr("kineticdesk.runtime.capabilities", lambda: denied)
+    owner = object()
+    runtime.connect(owner)
+
+    runtime.handle(owner, {"command": "scan"})
+
+    assert opened == [True]
+    assert runtime.snapshot()["awaitingAccessibility"]
+    assert runtime.source == "off"
+    assert runtime.camera is None and runtime.input is None
+
+    runtime.handle(owner, {"command": "open-accessibility"})
+    assert opened == [True, True]
+
+    monkeypatch.setattr("kineticdesk.runtime.capabilities", lambda: denied | {"accessibility": True})
+    runtime.refresh_permissions()
+    assert not runtime.snapshot()["awaitingAccessibility"]
+    assert runtime.camera is None and runtime.input is None

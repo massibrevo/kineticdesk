@@ -12,6 +12,7 @@ type Motion = {
   amount: number | null; injected: boolean; interrupted: boolean;
 }
 type Frame = {
+  canOpenAccessibility: boolean; awaitingAccessibility: boolean;
   source: 'off' | 'camera' | 'replay'; mode: string; reason: string; desktop: boolean;
   position: [number, number]; scanning: boolean; pose: string; armProgress: number; points: number[][] | null;
   aspect: number; preview: string | null; previewEnabled: boolean; events: Motion[];
@@ -278,6 +279,7 @@ function App() {
   const replay = frame?.source === 'replay'
   const cameraReady = live && frame.frameAge != null
   const cameraLabel = cameraReady ? 'Fotocamera attiva' : 'Fotocamera in avvio'
+  const needsAccessibility = frame?.canOpenAccessibility && !frame.device.accessibility
   const running = !!frame && frame.source !== 'off'
   const mode = !running ? 'Fermo' : frame.scanning ? 'Scansione della mano' :
     frame.desktop && frame.mode === 'armed' ? 'Puntatore attivo' : modes[frame.mode]
@@ -300,6 +302,9 @@ function App() {
         </div>
       </div>
       {frame?.error && <div className="alert" role="alert">{frame.error}</div>}
+      {needsAccessibility && frame.awaitingAccessibility && <p className="session-hint" role="status">
+        Attiva KineticDesk in Accessibilità, poi torna qui e premi di nuovo Avvia scansione.
+      </p>}
       <div className="toolbar" aria-label="Controlli della sessione">
         <button className="primary" disabled={!frame || frame.scanning || frame.desktop}
           onClick={() => send('scan')}>{live ? 'Scansiona per controllare il Mac' : 'Avvia scansione e controllo del Mac'}</button>
@@ -348,11 +353,14 @@ function App() {
                 <div><dt>Fotocamera</dt><dd>{permissions[frame?.device.camera ?? 'unknown']}</dd></div>
                 <div><dt>Accessibilità</dt><dd>{frame?.device.accessibility ? 'Concessa' : 'Da concedere'}</dd></div>
               </dl>
-              {frame?.device.platform === 'macOS' ? <p className="permission">Gestisci i permessi in Impostazioni di Sistema → Privacy e sicurezza.</p> :
+              {frame?.device.platform === 'macOS' ? <p className="permission">{needsAccessibility
+                ? 'Per muovere il puntatore, autorizza KineticDesk in Accessibilità.'
+                : 'Gestisci i permessi in Impostazioni di Sistema → Privacy e sicurezza.'}</p> :
                 <p className="permission">L’input desktop è in anteprima su macOS.</p>}
               <div className="control-buttons">
                 {cameraReady && (frame.desktop || frame.mode === 'paused') &&
                   <button onClick={() => send('dry-run')}>{frame.desktop ? 'Torna alla simulazione' : 'Riprendi simulazione'}</button>}
+                {needsAccessibility && <button onClick={() => send('open-accessibility')}>Apri Accessibilità</button>}
                 <button disabled={!frame} onClick={() => send('permissions')}>Aggiorna permessi</button>
               </div>
               <div className="activity"><h3>Ultime azioni</h3>

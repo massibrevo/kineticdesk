@@ -41,13 +41,13 @@ to check the framing or **Espandi Studio** (Expand Studio) to enlarge the
 workspace. The default tracking area covers 80% of each frame dimension.
 A saved calibration overrides these defaults.
 
-For desktop control, grant Accessibility permission in **System Settings →
-Privacy & Security → Accessibility**. In the native app, use **KineticDesk →
-Autorizza Accessibilità…** (Authorize Accessibility) to request it. When running
-from source, grant permission to the app macOS identifies as the launcher, such
-as Terminal or iTerm. Restart the launcher if macOS requests it.
-
 Select **Avvia scansione e controllo del Mac** (Start scan and control the Mac).
+If the native app needs Accessibility permission, it opens the macOS permission
+pane. Enable KineticDesk, return to the app, and start the scan again. You can also
+open the pane with **Apri Accessibilità** (Open Accessibility) in the Studio.
+When running from source, grant permission to the launcher in **System Settings →
+Privacy & Security → Accessibility**.
+
 Show one hand and hold your index finger up until the progress bar fills.
 When you see **Puntatore attivo** (Pointer active), move your hand to steer the
 pointer. Choose **Torna alla simulazione** (Return to simulation) to practice
