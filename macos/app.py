@@ -23,7 +23,7 @@ from AppKit import (
     NSWindowStyleMaskTitled,
 )
 from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
-from Foundation import NSObject, NSTimer, NSURL, NSURLRequest
+from Foundation import NSObject, NSTimer, NSURL, NSURLRequest, NSUserDefaults
 from PyObjCTools import AppHelper
 from WebKit import (
     WKWebView,
@@ -34,6 +34,7 @@ from WebKit import (
 from kineticdesk.api import create_app
 from kineticdesk.runtime import Runtime
 
+ACCESSIBILITY_OFFERED_KEY = "KineticDeskAccessibilityOffered"
 ACCESSIBILITY_SETTINGS = (
     "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility"
 )
@@ -70,7 +71,13 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
             self.listener = socket.socket()
             self.listener.bind(("127.0.0.1", 0))
             self.port = self.listener.getsockname()[1]
-            self.runtime = Runtime(open_accessibility=self.queueAccessibility)
+            self.defaults = NSUserDefaults.standardUserDefaults()
+            self.runtime = Runtime(
+                open_accessibility=self.queueAccessibility,
+                accessibility_offered=self.defaults.boolForKey_(ACCESSIBILITY_OFFERED_KEY),
+            )
+            if self.runtime.device["accessibility"]:
+                self.rememberAccessibilityOffer()
             self.server = uvicorn.Server(uvicorn.Config(
                 create_app(self.port, self.runtime),
                 host="127.0.0.1", port=self.port, loop="asyncio",
@@ -108,7 +115,14 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
     def queueAccessibility(self):
         AppHelper.callAfter(self.requestAccessibility_, None)
 
+    @objc.python_method
+    def rememberAccessibilityOffer(self):
+        self.defaults.setBool_forKey_(True, ACCESSIBILITY_OFFERED_KEY)
+        self.runtime.mark_accessibility_offered()
+
     def requestAccessibility_(self, _sender):
+        if self.runtime is not None:
+            self.rememberAccessibilityOffer()
         # Ask macOS to register this app before opening the permission pane.
         trusted = AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
         if not trusted:

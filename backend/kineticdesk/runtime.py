@@ -15,13 +15,16 @@ CAMERA_START_TIMEOUT = 25.
 
 
 class Runtime:
-    def __init__(self, input_factory=MacInput, *, open_accessibility=None):
+    def __init__(
+        self, input_factory=MacInput, *, open_accessibility=None, accessibility_offered=False,
+    ):
         self.lock = RLock()
         self.profile = load_profile()
         self.defaults = Profile().model_dump()
         self.engine = GestureEngine(self.profile)
         self.input_factory = input_factory
         self.open_accessibility = open_accessibility
+        self.accessibility_offered = accessibility_offered
         self.awaiting_accessibility = False
         self.input = None
         self.owner = None
@@ -49,12 +52,18 @@ class Runtime:
             if self.device["accessibility"]:
                 self.awaiting_accessibility = False
 
-    def _request_accessibility(self):
+    def mark_accessibility_offered(self):
+        with self.lock:
+            self.accessibility_offered = True
+
+    def _request_accessibility(self, *, manual=False):
         if self.open_accessibility is None or self.device["accessibility"]:
             return
-        self.open_accessibility()
         self.awaiting_accessibility = True
         self.error = None
+        if manual or not self.accessibility_offered:
+            self.open_accessibility()
+            self.accessibility_offered = True
 
     def connect(self, owner):
         with self.lock:
@@ -161,7 +170,7 @@ class Runtime:
         elif command in ("permissions", "open-accessibility"):
             self.refresh_permissions()
             if command == "open-accessibility":
-                self._request_accessibility()
+                self._request_accessibility(manual=True)
         elif command in ("camera", "scan"):
             if command == "scan":
                 if now - self.lease >= LEASE:

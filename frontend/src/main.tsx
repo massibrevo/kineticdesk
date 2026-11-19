@@ -303,7 +303,7 @@ function App() {
       </div>
       {frame?.error && <div className="alert" role="alert">{frame.error}</div>}
       {needsAccessibility && frame.awaitingAccessibility && <p className="session-hint" role="status">
-        Attiva KineticDesk in Accessibilità, poi torna qui e premi di nuovo Avvia scansione.
+        Per continuare, abilita KineticDesk usando Apri Accessibilità. Poi torna qui e avvia la scansione.
       </p>}
       <div className="toolbar" aria-label="Controlli della sessione">
         <button className="primary" disabled={!frame || frame.scanning || frame.desktop}

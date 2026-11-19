@@ -42,9 +42,10 @@ workspace. The default tracking area covers 80% of each frame dimension.
 A saved calibration overrides these defaults.
 
 Select **Avvia scansione e controllo del Mac** (Start scan and control the Mac).
-If the native app needs Accessibility permission, it opens the macOS permission
-pane. Enable KineticDesk, return to the app, and start the scan again. You can also
-open the pane with **Apri Accessibilità** (Open Accessibility) in the Studio.
+If the native app needs Accessibility permission on your first scan attempt,
+it opens the macOS permission pane once. Enable KineticDesk, return to the app,
+and start the scan again. To reopen the pane, select **Apri Accessibilità**
+(Open Accessibility) in the Studio.
 When running from source, grant permission to the launcher in **System Settings →
 Privacy & Security → Accessibility**.
 
