@@ -303,7 +303,7 @@ function App() {
       </div>
       {frame?.error && <div className="alert" role="alert">{frame.error}</div>}
       {needsAccessibility && frame.awaitingAccessibility && <p className="session-hint" role="status">
-        Per continuare, abilita KineticDesk usando Apri Accessibilità. Poi torna qui e avvia la scansione.
+        macOS non riconosce il permesso per questa copia. Usa Apri Accessibilità per autorizzarla, poi riprova.
       </p>}
       <div className="toolbar" aria-label="Controlli della sessione">
         <button className="primary" disabled={!frame || frame.scanning || frame.desktop}

@@ -1,4 +1,5 @@
 """Build the standalone macOS application after running the standard bootstrap."""
+import argparse
 import os
 import shutil
 import subprocess
@@ -13,6 +14,13 @@ PACKAGES = (
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--signing-identity",
+        default=os.environ.get("KINETICDESK_SIGNING_IDENTITY"),
+        help="macOS code-signing identity to reuse across app updates",
+    )
+    args = parser.parse_args()
     if sys.platform != "darwin":
         raise SystemExit("The desktop package must be built on macOS.")
     python = ROOT / ".venv/bin/python"
@@ -26,6 +34,7 @@ def main():
     env = os.environ | {
         "PYINSTALLER_CONFIG_DIR": str(ROOT / ".cache/macos/pyinstaller"),
         "MPLCONFIGDIR": str(ROOT / ".cache/matplotlib"),
+        "KINETICDESK_SIGNING_IDENTITY": args.signing_identity or "",
     }
     subprocess.run(["npm", "--prefix", "frontend", "run", "build"], cwd=ROOT, check=True)
     subprocess.run(

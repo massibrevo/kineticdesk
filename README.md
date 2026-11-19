@@ -17,6 +17,14 @@ To build the app from source, run the bootstrap below, then run
 `python3 scripts/build_macos.py`. The build produces
 `.cache/macos/dist/KineticDesk.app` for your Mac's architecture.
 
+For updates, reuse your own macOS signing identity with
+`python3 scripts/build_macos.py --signing-identity "Developer ID Application: …"`.
+macOS ties permissions for ad-hoc builds to the specific build. If the
+Accessibility switch is already on but the updated app still reports missing
+permission, quit KineticDesk, remove its old entry in **Privacy & Security**,
+and authorize the installed copy again. Keep backup bundles outside Finder's
+application list, for example in a ZIP archive.
+
 ## Run from source
 
 You need macOS, Node.js 22, and [uv](https://docs.astral.sh/uv/). You can use

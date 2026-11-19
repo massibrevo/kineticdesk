@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_dynamic_libs
@@ -25,6 +26,7 @@ archive = PYZ(analysis.pure)
 exe = EXE(
     archive, analysis.scripts, [], exclude_binaries=True,
     name="KineticDesk", console=False, upx=False,
+    codesign_identity=os.environ.get("KINETICDESK_SIGNING_IDENTITY") or None,
 )
 files = COLLECT(exe, analysis.binaries, analysis.datas, name="KineticDesk", upx=False)
 app = BUNDLE(
@@ -35,8 +37,9 @@ app = BUNDLE(
     version="0.2.0",
     info_plist={
         "CFBundleDisplayName": "KineticDesk",
-        "CFBundleVersion": "3",
+        "CFBundleVersion": "4",
         "LSMinimumSystemVersion": "13.0",
+        "LSMultipleInstancesProhibited": True,
         "NSCameraUsageDescription": "KineticDesk usa la fotocamera per seguire i gesti della mano sul Mac.",
         "NSAppTransportSecurity": {
             "NSAllowsLocalNetworking": True,
