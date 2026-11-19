@@ -1,4 +1,5 @@
 from dataclasses import replace
+from math import dist
 
 from kineticdesk.gestures import GestureEngine, Hand, Profile
 from kineticdesk.replay import demo, frame
@@ -83,14 +84,64 @@ def test_pause_while_dragging_releases_once():
     assert engine.mode == "paused"
 
 
-def test_lost_hand_aborts_drag_and_cannot_rearm():
+def test_lost_hand_releases_drag_before_disarming():
     engine = ready()
     assert kinds(feed(engine, "pinch", 1.05, 1.63)) == ["down"]
-    assert not feed(engine, None, 1.63, 1.75)
-    assert kinds(feed(engine, None, 1.75, 1.95)) == ["up"]
+    assert not feed(engine, None, 1.63, 1.71)
+    assert engine.mode == "dragging"
+    recovery = feed(engine, None, 1.71, 1.80)
+    assert kinds(recovery) == ["up"] and recovery[0].interrupted
+    assert engine.mode == "armed"
+    assert not feed(engine, None, 1.80, 2.12)
     assert engine.reason == "tracking-lost"
-    assert not feed(engine, "fist", 1.95, 3.)
+    assert not feed(engine, "point", 2.12, 3.)
     assert engine.mode == "paused"
+
+
+def test_pointer_resumes_after_short_loss_without_jump():
+    engine = ready()
+    position = engine.position
+    assert not feed(engine, None, 1.05, 1.23)
+    assert engine.tracking_interrupted and engine.mode == "armed"
+    assert engine.position == position
+    first = feed(engine, "point", 1.23, 1.25, x=.30)
+    assert first[0].kind == "move"
+    assert dist(position, (first[0].x, first[0].y)) <= .121
+    assert not engine.tracking_interrupted
+    assert engine.mode == "armed"
+
+
+def test_drag_stays_held_through_one_missing_frame():
+    engine = ready()
+    assert kinds(feed(engine, "pinch", 1.05, 1.63)) == ["down"]
+    assert not feed(engine, None, 1.63, 1.68)
+    assert engine.mode == "dragging"
+    assert "move" in kinds(feed(engine, "pinch", 1.68, 1.73, x=.04))
+    released = feed(engine, "point", 1.73, 1.85)
+    assert notable(released) == ["up"]
+    assert not released[0].interrupted
+
+
+def test_brief_palm_pose_freezes_without_pausing():
+    engine = ready()
+    position = engine.position
+    assert not feed(engine, "palm", 1.05, 1.17)
+    assert engine.position == position and engine.mode == "armed"
+    assert kinds(feed(engine, "point", 1.17, 1.28, x=.05))
+    assert engine.mode == "armed"
+
+
+def test_pointer_filter_dampens_small_jitter_at_camera_cadence():
+    engine = GestureEngine()
+    displacement = []
+    for i in range(1, 31):
+        raw = (.5 + .004 * (-1) ** i, .5)
+        engine._move(i / 30, raw)
+        displacement.append(engine.position[0])
+    assert max(displacement) - min(displacement) < .003
+    for i in range(31, 37):
+        engine._move(i / 30, (.65, .5))
+    assert abs(engine.position[0] - .65) < .012
 
 
 def test_single_missing_frame_cancels_pending_click():

@@ -12,7 +12,7 @@ type Motion = {
   amount: number | null; injected: boolean; interrupted: boolean;
 }
 type Frame = {
-  canOpenAccessibility: boolean; awaitingAccessibility: boolean;
+  canOpenAccessibility: boolean; awaitingAccessibility: boolean; trackingInterrupted: boolean;
   source: 'off' | 'camera' | 'replay'; mode: string; reason: string; desktop: boolean;
   position: [number, number]; scanning: boolean; pose: string; armProgress: number; points: number[][] | null;
   aspect: number; preview: string | null; previewEnabled: boolean; events: Motion[];
@@ -282,6 +282,7 @@ function App() {
   const needsAccessibility = frame?.canOpenAccessibility && !frame.device.accessibility
   const running = !!frame && frame.source !== 'off'
   const mode = !running ? 'Fermo' : frame.scanning ? 'Scansione della mano' :
+    frame.trackingInterrupted ? 'Riaggancio mano…' :
     frame.desktop && frame.mode === 'armed' ? 'Puntatore attivo' : modes[frame.mode]
   const notable = [...(frame?.events ?? [])].reverse().filter(event => event.kind !== 'move').slice(0, 6)
   return <div className={expanded ? "shell expanded" : "shell"}>
@@ -298,7 +299,8 @@ function App() {
         <div><h1>{tab === 'studio' ? 'Studio gesti' : 'Profilo di controllo'}</h1>
         <p>Controlla il desktop con la mano. L’elaborazione avviene su questo Mac.</p></div>
         <div className="status" data-mode={running ? frame.mode : 'off'} role="status">
-          <i/>{live && !cameraReady ? 'Avvio fotocamera' : mode}{frame?.mode === 'paused' && reasons[frame.reason] ? ' · ' + reasons[frame.reason] : ''}
+          <i/>{live && !cameraReady ? 'Avvio fotocamera' : mode}
+          {frame && (frame.mode === 'paused' || frame.mode === 'stopped') && reasons[frame.reason] ? ' · ' + reasons[frame.reason] : ''}
         </div>
       </div>
       {frame?.error && <div className="alert" role="alert">{frame.error}</div>}

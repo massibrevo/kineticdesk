@@ -20,7 +20,9 @@ mirroring setting.
 | Dragging | Maintain the pinch | Move relative to the hand position at the start of the drag. |
 | Dragging | Keep the pinch open for 27 ms | Release the mouse button once and return to Armed. |
 | Armed | Extend index and middle for 90 ms and move vertically | Scroll at a limited rate while keeping the pointer still. |
-| Armed, Pinching, or Dragging | Open palm for 105 ms, lose tracking for 200 ms, or remain idle for 45 seconds | Release any held button and pause. |
+| Armed or Dragging | Briefly lose tracking | Hold the pointer still and resume on a fresh frame within the grace period. |
+| Dragging | Lose tracking for 110 ms | Release the mouse button once and cancel the drag. |
+| Armed, Pinching, or Dragging | Open palm for 175 ms, lose tracking for 450 ms, or remain idle for 45 seconds | Release any held button and pause. |
 | Scanning or controlling the desktop | Hide the Studio tab | Cancel the scan or release any held button and pause. |
 | Any | Stop, disconnect, heartbeat expires, camera fails, or the app quits | Release any held button, stop, and discard consent. |
 | Paused | Start simulation or request a new scan | Wait for the corresponding activation gesture. |

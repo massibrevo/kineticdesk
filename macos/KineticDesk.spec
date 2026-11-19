@@ -37,7 +37,7 @@ app = BUNDLE(
     version="0.2.0",
     info_plist={
         "CFBundleDisplayName": "KineticDesk",
-        "CFBundleVersion": "4",
+        "CFBundleVersion": "5",
         "LSMinimumSystemVersion": "13.0",
         "LSMultipleInstancesProhibited": True,
         "NSCameraUsageDescription": "KineticDesk usa la fotocamera per seguire i gesti della mano sul Mac.",

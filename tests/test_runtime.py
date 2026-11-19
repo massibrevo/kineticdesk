@@ -8,7 +8,7 @@ from kineticdesk.api import create_app
 from kineticdesk.config import load_profile, save_profile
 from kineticdesk.gestures import Action, Profile
 from kineticdesk.replay import frame
-from kineticdesk.runtime import Runtime
+from kineticdesk.runtime import LEASE, Runtime
 
 
 class FakeInput:
@@ -137,8 +137,9 @@ def test_emergency_paths_release_once(runtime, reason):
     if reason == "disconnect":
         runtime.disconnect(owner)
     elif reason == "timeout":
-        runtime.lease -= 2
+        runtime.lease -= LEASE + .1
         runtime.watchdog()
+        assert runtime.engine.reason == "ui-timeout"
     elif reason == "stop":
         runtime.handle(owner, {"command": "stop"})
     elif reason == "pause":
@@ -211,3 +212,35 @@ def test_missing_accessibility_offers_pane_once(runtime, monkeypatch, already_of
     runtime.refresh_permissions()
     assert not runtime.snapshot()["awaitingAccessibility"]
     assert runtime.camera is None and runtime.input is None
+
+
+def test_camera_frame_stall_freezes_then_resumes_before_safety_pause(runtime, monkeypatch):
+    owner = object()
+    runtime.connect(owner)
+    camera = type("Camera", (), {"preview": False})()
+    runtime.camera = camera
+    runtime.source = "camera"
+    runtime.engine.mode = "armed"
+    adapter = FakeInput()
+    runtime.input = adapter
+    now = monotonic()
+    runtime.engine.last_active = now
+    monkeypatch.setattr("kineticdesk.runtime.monotonic", lambda: now)
+    for offset in (0., .04, .08):
+        now = runtime.lease + offset
+        runtime._frame(camera, now, frame("point"), 4 / 3, None)
+    adapter.events.clear()
+    now += .17
+    runtime.watchdog()
+    assert runtime.snapshot()["trackingInterrupted"]
+    assert runtime.input is adapter and adapter.events == []
+
+    now += .01
+    runtime._frame(camera, now, frame("point", x=.08), 4 / 3, None)
+    assert not runtime.snapshot()["trackingInterrupted"]
+    assert adapter.events == ["move"]
+
+    now += .46
+    runtime.watchdog()
+    assert runtime.engine.reason == "tracking-lost"
+    assert runtime.input is None

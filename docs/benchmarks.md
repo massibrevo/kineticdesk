@@ -7,8 +7,8 @@ Run the synthetic benchmark from the repository root.
 ```
 
 On the Apple M3 Pro development Mac, 100 replays processed 14,500 frames.
-Landmark geometry and gesture-state processing took 6.83 µs at the median and
-8.33 µs at the 95th percentile. Each replay produced 39 position updates, one
+Landmark geometry and gesture-state processing took 6.71 µs at the median and
+8.54 µs at the 95th percentile. Each replay produced 46 position updates, one
 click, one press-and-release pair, and eight scroll events. These measurements
 cover the gesture engine. Camera capture, MediaPipe inference, UI rendering,
 and OS event delivery fall outside the benchmark.

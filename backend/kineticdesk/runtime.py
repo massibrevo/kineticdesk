@@ -3,14 +3,14 @@ from collections import deque
 from threading import RLock
 from time import monotonic
 
-from .camera import Camera
+from .camera import FRAME_TIMEOUT, Camera
 from .config import load_profile, save_profile
 from .gestures import GestureEngine, Hand, Profile
 from .platform_input import MacInput, capabilities
 from .replay import demo
 
-LEASE = 1.25
-FRAME_TIMEOUT = .35
+LEASE = 2.5
+FRAME_FRESHNESS = .10
 CAMERA_START_TIMEOUT = 25.
 
 
@@ -291,7 +291,7 @@ class Runtime:
                 elif self.last_frame is None and now - self.source_started > CAMERA_START_TIMEOUT:
                     self.stop("camera-stalled")
                     self.error = "La fotocamera non ha risposto in tempo."
-                elif self.last_frame is not None and now - self.last_frame > .09:
+                elif self.last_frame is not None and now - self.last_frame > FRAME_FRESHNESS:
                     self._actions(self.engine.tick(now, None))
                     if self.engine.mode == "paused":
                         self._release()
@@ -307,6 +307,7 @@ class Runtime:
                 "desktop": self._output_available(), "position": self.engine.position,
                 "pose": self.engine.pose, "armProgress": self.engine.arm_progress(now),
                 "scanning": self._scanning(),
+                "trackingInterrupted": self.source == "camera" and self.engine.tracking_interrupted,
                 "points": self.points, "aspect": self.aspect, "preview": self.preview,
                 "previewEnabled": self.camera is not None and self.camera.preview,
                 "events": list(self.history), "device": self.device, "error": self.error,

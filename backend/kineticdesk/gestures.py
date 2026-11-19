@@ -110,8 +110,9 @@ def clamp(value):
 class GestureEngine:
     ARM = .75
     SCAN = .55
-    PAUSE = .105
-    LOST = .20
+    PAUSE = .175
+    DRAG_LOST = .11
+    LOST = .45
     IDLE = 45.
     DEBOUNCE = .055
     RELEASE = .027
@@ -119,6 +120,7 @@ class GestureEngine:
     SCROLL = .09
     MIN_SCROLL = .030
     MIN_MOVE = .010
+    MAX_POINTER_SPEED = 3.6  # Normalized screen lengths per second.
 
     def __init__(self, profile=None):
         self.profile = profile or Profile()
@@ -128,7 +130,8 @@ class GestureEngine:
         self.last_seen = None
         self.last_active = 0.
         self.started = 0.
-        self.last_move = -1.
+        self.pointer_sample = None
+        self.tracking_interrupted = False
         self.last_point = -1.
         self.pose = ""
         self.pose_since = 0.
@@ -153,6 +156,8 @@ class GestureEngine:
         self.resume_gate = True
         self.last_seen = None
         self.last_point = -1.
+        self.pointer_sample = None
+        self.tracking_interrupted = False
         return events
 
     def begin(self, now, reason="dry-run", arm_pose="fist"):
@@ -173,16 +178,24 @@ class GestureEngine:
                       interrupted=interrupted)
 
     def _move(self, now, point):
-        if now - self.last_move < self.MIN_MOVE:
+        elapsed = now - self.pointer_sample if self.pointer_sample is not None else 1 / 30
+        if elapsed < self.MIN_MOVE:
             return []
-        weight = min(
-            1., self.profile.smoothing + 2.5 * dist(self.position, point)
-        )
+        self.pointer_sample = now
+        elapsed = min(elapsed, 1 / 20)
+        error = dist(self.position, point)
+        if error < .001:
+            return []
+
+        # Filter small jitter, but give deliberate movement a faster response.
+        # Normalize the weight to elapsed time so camera cadence has less effect.
+        fine_weight = self.profile.smoothing * .42
+        response = fine_weight + (.93 - fine_weight) * min(1., error / .10)
+        weight = min(1 - (1 - response) ** (elapsed * 30), self.MAX_POINTER_SPEED * elapsed / error)
         x, y = (a + weight * (b - a) for a, b in zip(self.position, point))
-        if dist(self.position, (x, y)) < .001:
+        if dist(self.position, (x, y)) < .0006:
             return []
         self.position = (x, y)
-        self.last_move = now
         self.last_active = now
         return [Action(kind="move", at=now, x=x, y=y)]
 
@@ -191,22 +204,43 @@ class GestureEngine:
             return []
         if self.mode != "ready" and now - self.last_active >= self.IDLE:
             return self.reset(now, "paused", "idle")
-        if (self.mode != "ready" and self.last_seen is not None
-                and now - self.last_seen >= self.LOST):
+        gap = now - self.last_seen if self.last_seen is not None else 0.
+        if self.mode != "ready" and gap >= self.LOST:
             return self.reset(now, "paused", "tracking-lost")
-        if hand is None:
+
+        if self.mode == "dragging" and gap >= self.DRAG_LOST:
+            self.mode = "armed"
+            self.resume_gate = True
+            self.release_since = None
+            self.last_point = -1.
+            self.pointer_sample = None
             self.pose = ""
+            self.tracking_interrupted = hand is None
+            if hand is not None:
+                self.last_seen = now
+            return [self._position_action("up", now, interrupted=True)]
+
+        if hand is None:
+            self.tracking_interrupted = self.mode != "ready"
+            if self.mode == "ready" or self.pose != "point":
+                self.pose = ""
             self.release_since = self.palm_since = self.scroll_y = None
             self.scroll_accum = 0.
+            self.pointer_sample = None
+            self.last_point = -1.
+            self.resume_gate = True
             if self.mode == "pinching":
                 self.mode = "armed"
-                self.resume_gate = True
             return []
+
         self.last_seen = now
+        self.tracking_interrupted = False
         if hand.palm:
             if self.palm_since is None:
                 self.palm_since = now
             self.pose = ""
+            self.pointer_sample = None
+            self.last_point = -1.
             self.release_since = self.scroll_y = None
             self.scroll_accum = 0.
             if self.mode == "pinching":
@@ -229,6 +263,7 @@ class GestureEngine:
                 self.pose_since = now
         if pose != self.pose:
             self.pose, self.pose_since = pose, now
+            self.pointer_sample = None
             self.scroll_y = None
             self.scroll_accum = 0.
         age = now - self.pose_since
