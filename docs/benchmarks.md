@@ -2,9 +2,9 @@
 
 Run `.venv/bin/python scripts/benchmark.py --replay tests/fixtures/`. On the
 Apple M3 Pro development Mac, 100 deterministic replays exercised 14,500 frames.
-A local run recorded 6.08 µs median and 7.29 µs p95 for landmark geometry and
-gesture-state processing. Each replay emitted 38 position updates, one short
-click, one down/up pair and six scroll events. Camera acquisition, MediaPipe
+A local run recorded 6.83 µs median and 8.33 µs p95 for landmark geometry and
+gesture-state processing. Each replay emitted 39 position updates, one short
+click, one down/up pair and eight scroll events. Camera acquisition, MediaPipe
 inference, the browser, and OS dispatch are outside this measurement.
 
 For live evaluation, repeat a fixed set of center and edge targets with each

@@ -42,9 +42,9 @@ const permissions: Record<string, string> = {
 }
 const gestures = [
   ['Scansiona', 'Per controllare il Mac, tieni fermo l’indice durante la scansione. In simulazione chiudi il pugno.'],
-  ['Muovi', 'Distendi l’indice verso l’alto e ripiega le altre dita.'],
+  ['Muovi', 'Distendi l’indice verso l’alto e lascia le altre dita rilassate.'],
   ['Clic', 'Dalla posizione di puntamento, unisci pollice e indice, poi rilasciali.'],
-  ['Trascina', 'Tieni la pinza, muovi la mano e apri le dita per rilasciare.'],
+  ['Trascina', 'Tieni la pinza finché compare Trascinamento, poi muovi la mano e riapri le dita.'],
   ['Scorri', 'Estendi indice e medio, poi muovili in verticale.'],
   ['Pausa', 'Mostra il palmo aperto. Puoi anche premere Esc.'],
 ]
@@ -251,6 +251,29 @@ function Calibration({profile, frame, send}: {profile: Profile; frame: Frame; se
 function App() {
   const {frame, status, send} = useStudio()
   const [tab, setTab] = useState<'studio' | 'calibrazione'>('studio')
+  const [expanded, setExpanded] = useState(false)
+  const usedFullscreen = useRef(false)
+  useEffect(() => {
+    function fullscreenChanged() {
+      if (document.fullscreenElement === document.documentElement) {
+        usedFullscreen.current = true
+      } else if (usedFullscreen.current) {
+        usedFullscreen.current = false
+        setExpanded(false)
+      }
+    }
+    document.addEventListener('fullscreenchange', fullscreenChanged)
+    return () => document.removeEventListener('fullscreenchange', fullscreenChanged)
+  }, [])
+
+  function toggleWorkspace() {
+    setExpanded(!expanded)
+    if (expanded && document.fullscreenElement === document.documentElement) {
+      void document.exitFullscreen().catch(() => {})
+    } else if (!expanded && document.fullscreenEnabled) {
+      void document.documentElement.requestFullscreen().catch(() => {})
+    }
+  }
   const live = frame?.source === 'camera'
   const replay = frame?.source === 'replay'
   const cameraReady = live && frame.frameAge != null
@@ -259,7 +282,7 @@ function App() {
   const mode = !running ? 'Fermo' : frame.scanning ? 'Scansione della mano' :
     frame.desktop && frame.mode === 'armed' ? 'Puntatore attivo' : modes[frame.mode]
   const notable = [...(frame?.events ?? [])].reverse().filter(event => event.kind !== 'move').slice(0, 6)
-  return <div className="shell">
+  return <div className={expanded ? "shell expanded" : "shell"}>
     <header className="top">
       <div className="brand"><span className="logo" aria-hidden="true"><i/><i/><i/></span><span>KineticDesk</span></div>
       <nav aria-label="Sezioni">
@@ -283,6 +306,7 @@ function App() {
         <button disabled={!frame || live} onClick={() => send('camera')}>Solo simulazione</button>
         <button disabled={!frame} onClick={() => send('demo')}>{replay ? 'Ripeti la demo' : 'Demo dei gesti'}</button>
         <span className="toolbar-gap"/>
+        <button onClick={toggleWorkspace}>{expanded ? 'Riduci Studio' : 'Espandi Studio'}</button>
         <button disabled={!running || frame.mode === 'paused'} onClick={() => send('pause')}>Pausa <kbd>Esc</kbd></button>
         <button className="danger" disabled={!running} onClick={() => send('stop')}>■ Stop</button>
       </div>
@@ -297,7 +321,7 @@ function App() {
             {frame?.scanning && <div className="scan-progress">
               <strong>{!cameraReady ? 'Apertura della fotocamera' : !frame.points ? 'Inquadra la mano' : 'Tieni fermo l’indice'}</strong>
               <span>{!cameraReady ? 'L’anteprima locale si apre durante la scansione.' :
-                'Distendi solo l’indice verso l’alto per circa un secondo.'}</span>
+                'Distendi l’indice verso l’alto e tienilo fermo per circa mezzo secondo.'}</span>
               <progress aria-label="Scansione della mano" max="1" value={frame.armProgress}/>
             </div>}
             <Tracking frame={frame}/>

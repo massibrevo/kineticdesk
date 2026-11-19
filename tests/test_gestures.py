@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from kineticdesk.gestures import GestureEngine, Hand, Profile
 from kineticdesk.replay import demo, frame
 
@@ -112,3 +114,30 @@ def test_profile_affects_coordinates_and_hold():
     assert "down" in kinds(feed(base, "pinch", 1.05, 1.60))
     assert not feed(alternate, "pinch", 1.05, 1.60)
     assert "down" in kinds(feed(alternate, "pinch", 1.60, 1.78))
+
+
+def test_slightly_bent_index_can_scan_and_move():
+    points = frame("point")
+    closed = frame("fist")
+    for i in range(6, 9):
+        points[i] = [a + .4 * (b - a) for a, b in zip(points[i], closed[i])]
+    hand = Hand.from_points(points)
+    assert hand.point and not hand.palm
+    engine = GestureEngine()
+    engine.begin(0, "scan", arm_pose="point")
+    for i in range(55):
+        assert not engine.tick(i / 100, hand)
+    assert engine.mode == "ready"
+    assert not engine.tick(.55, hand)
+    assert engine.mode == "armed"
+    assert kinds(engine.tick(.57, hand)) == ["move"]
+
+
+def test_brief_loose_pinch_clicks_once():
+    engine = ready()
+    pinch = replace(Hand.from_points(frame("pinch")), pinch=.27)
+    for i in range(105, 111):
+        assert not engine.tick(i / 100, pinch)
+    release = replace(Hand.from_points(frame("point")), pinch=.42)
+    events = [event for i in range(111, 150) for event in engine.tick(i / 100, release)]
+    assert notable(events) == ["click"]

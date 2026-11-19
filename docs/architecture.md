@@ -17,8 +17,8 @@ Camera capture and inference run on separate threads. The handoff holds one fram
 Inference uses the newest frame and drops stale frames. The runtime serializes
 adapter calls, external commands, transitions and release under one lock.
 The independent watchdog expires the browser lease and ends a stalled camera session.
-The browser receives snapshots at approximately 15 Hz. OS actions use the worker's
-gesture rate directly. The adapter uses Quartz logical coordinates and explicit
+The browser receives snapshots up to 50 Hz. Capture requests 60 fps and uses the
+rate available from the camera. OS actions use fresh tracking frames directly. The adapter uses Quartz logical coordinates and explicit
 drag events. PyAutoGUI's fail-safe remains enabled.
 
 The compiled Vite UI is served by FastAPI on the same origin as its WebSocket.

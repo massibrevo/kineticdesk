@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 FIRST_FRAME_TIMEOUT = 4.0
+TARGET_CAMERA_FPS = 60
 MODEL = Path(__file__).resolve().parents[2] / ".cache/models/hand_landmarker.task"
 
 
@@ -54,6 +55,7 @@ class Camera:
                 raise RuntimeError("Fotocamera non disponibile. Controlla dispositivo e permessi.")
             device.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             device.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            device.set(cv2.CAP_PROP_FPS, TARGET_CAMERA_FPS)
             misses = 0
             first_frame_deadline = time.monotonic() + FIRST_FRAME_TIMEOUT
             received_frame = False

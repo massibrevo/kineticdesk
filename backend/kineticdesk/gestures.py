@@ -6,15 +6,15 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class Profile(BaseModel):
-    x_min: float = Field(.16, ge=0, le=.85)
-    x_max: float = Field(.84, ge=.15, le=1)
-    y_min: float = Field(.16, ge=0, le=.85)
-    y_max: float = Field(.78, ge=.15, le=1)
-    pinch_in: float = Field(.24, ge=.08, le=.65)
-    pinch_out: float = Field(.37, ge=.12, le=.85)
-    drag_ms: int = Field(450, ge=300, le=900)
+    x_min: float = Field(.10, ge=0, le=.85)
+    x_max: float = Field(.90, ge=.15, le=1)
+    y_min: float = Field(.09, ge=0, le=.85)
+    y_max: float = Field(.89, ge=.15, le=1)
+    pinch_in: float = Field(.29, ge=.08, le=.65)
+    pinch_out: float = Field(.40, ge=.12, le=.85)
+    drag_ms: int = Field(400, ge=300, le=900)
     smoothing: float = Field(.55, ge=.1, le=.95)
-    scroll_gain: float = Field(38, ge=15, le=100)
+    scroll_gain: float = Field(48, ge=15, le=100)
     mirrored: bool = True
     camera: int = Field(0, ge=0, le=9)
 
@@ -49,6 +49,7 @@ class Hand:
     middle: bool
     ring: bool
     pinky: bool
+    palm_open: bool | None = None
 
     @classmethod
     def from_points(cls, points: list[list[float]], aspect: float = 4 / 3):
@@ -61,19 +62,25 @@ class Hand:
         if scale < .025:
             return None
 
-        def extended(i):
+        def extension(i):
             a, b, c, d = xyz[i:i + 4]
             length = dist(a, b) + dist(b, c) + dist(c, d)
-            return (
-                length > 0
-                and dist(a, d) / length > .80
-                and dist(xyz[0], d) > dist(xyz[0], b) + .13 * scale
-            )
+            reach = (dist(xyz[0], d) - dist(xyz[0], b)) / scale
+            return (dist(a, d) / length if length else 0.), reach
+
+        index, middle, ring, pinky = (extension(i) for i in (5, 9, 13, 17))
+
+        def extended(measures, straightness, reach):
+            return measures[0] > straightness and measures[1] > reach
 
         return cls(
             tuple(points[8][:2]), tuple(points[0][:2]), (points[8][1] + points[12][1]) / 2,
             dist(xyz[4], xyz[8]) / scale,
-            *(extended(i) for i in (5, 9, 13, 17)),
+            extended(index, .72, .08),
+            extended(middle, .78, .12),
+            extended(ring, .84, .15),
+            extended(pinky, .84, .15),
+            all(extended(finger, .76, .085) for finger in (index, middle, ring, pinky)),
         )
 
     @property
@@ -86,7 +93,10 @@ class Hand:
 
     @property
     def palm(self):
-        return self.index and self.middle and self.ring and self.pinky and self.pinch > .55
+        spread = self.palm_open
+        if spread is None:
+            spread = self.index and self.middle and self.ring and self.pinky
+        return spread and self.pinch > .55
 
     @property
     def fist(self):
@@ -99,14 +109,16 @@ def clamp(value):
 
 class GestureEngine:
     ARM = .75
-    PAUSE = .14
+    SCAN = .55
+    PAUSE = .105
     LOST = .20
     IDLE = 45.
-    DEBOUNCE = .075
-    RELEASE = .045
-    POINT = .055
-    SCROLL = .13
-    MIN_SCROLL = .040
+    DEBOUNCE = .055
+    RELEASE = .027
+    POINT = .035
+    SCROLL = .09
+    MIN_SCROLL = .030
+    MIN_MOVE = .010
 
     def __init__(self, profile=None):
         self.profile = profile or Profile()
@@ -147,9 +159,13 @@ class GestureEngine:
         self.arm_pose = arm_pose
         return self.reset(now, "ready", reason)
 
+    @property
+    def arm_duration(self):
+        return self.SCAN if self.arm_pose == "point" else self.ARM
+
     def arm_progress(self, now):
         if self.mode == "ready" and self.pose == self.arm_pose:
-            return min(1., max(0., (now - self.pose_since) / self.ARM))
+            return min(1., max(0., (now - self.pose_since) / self.arm_duration))
         return 0.
 
     def _position_action(self, kind, now, interrupted=False):
@@ -157,7 +173,7 @@ class GestureEngine:
                       interrupted=interrupted)
 
     def _move(self, now, point):
-        if now - self.last_move < .015:
+        if now - self.last_move < self.MIN_MOVE:
             return []
         weight = min(
             1., self.profile.smoothing + 2.5 * dist(self.position, point)
@@ -208,7 +224,7 @@ class GestureEngine:
             if pose != "point" or hand.pinch < profile.pinch_out:
                 pose = ""
                 self.scan_anchor = None
-            elif self.pose != "point" or dist(self.scan_anchor, hand.tip) > .075:
+            elif self.pose != "point" or dist(self.scan_anchor, hand.tip) > .095:
                 self.scan_anchor = hand.tip
                 self.pose_since = now
         if pose != self.pose:
@@ -217,7 +233,7 @@ class GestureEngine:
             self.scroll_accum = 0.
         age = now - self.pose_since
         if self.mode == "ready":
-            if pose == self.arm_pose and age >= self.ARM:
+            if pose == self.arm_pose and age >= self.arm_duration:
                 self.mode, self.reason = "armed", "armed"
                 self.last_active = now
                 self.resume_gate = self.arm_pose != "point"

@@ -26,3 +26,12 @@ test('Escape pauses the replay and a fresh source requires new intent', async ({
   await page.getByRole('button', {name: 'Calibrazione'}).click()
   await expect(page.getByLabel('Pinza chiusa')).toBeVisible()
 })
+
+test('expands and restores the workspace while keeping session controls available', async ({page}) => {
+  await page.goto('/')
+  await page.getByRole('button', {name: 'Espandi Studio'}).click()
+  await expect(page.locator('.shell')).toHaveClass(/expanded/)
+  await expect(page.getByRole('button', {name: 'Stop'})).toBeVisible()
+  await page.getByRole('button', {name: 'Riduci Studio'}).click()
+  await expect(page.locator('.shell')).not.toHaveClass(/expanded/)
+})

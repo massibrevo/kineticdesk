@@ -17,16 +17,19 @@ Apri l’indirizzo stampato dal processo, di norma `http://127.0.0.1:5173`. Se l
 
 Scegli **Demo dei gesti** per riprodurre una sequenza sintetica nell’area prova.
 Con **Solo simulazione** puoi provare gli stessi gesti usando la fotocamera.
-Premi **Mostra anteprima** se vuoi controllare l’inquadratura.
+Premi **Mostra anteprima** se vuoi controllare l’inquadratura. Usa **Espandi Studio**
+per allargare l’area di lavoro e passare a schermo intero se il browser lo consente.
+L’area di tracciamento predefinita copre l’80% della larghezza e dell’altezza
+del fotogramma. Le calibrazioni salvate continuano ad avere la precedenza.
 
 Per inviare input a macOS, concedi **Accessibilità** in **Impostazioni di Sistema → Privacy e sicurezza** all’app che lancia il processo. Per un avvio dal terminale, inizia con Terminale o iTerm. Se macOS attribuisce l’accesso a Python o all’app ospitante, usa il nome mostrato dal sistema. Riavvia dal terminale dopo la modifica se macOS lo richiede. Premi **Avvia scansione e controllo del Mac**. Consenti l’accesso alla fotocamera se macOS lo chiede. Nell’anteprima, mostra una mano, distendi solo l’indice verso l’alto e tienilo fermo finché la barra è piena. Quando lo Studio mostra **Puntatore attivo**, muovi la mano per muovere il puntatore. Usa **Torna alla simulazione** per provare senza input di sistema.
 
 | Gesto | Azione |
 | --- | --- |
-| Indice disteso e fermo per circa un secondo durante la scansione | Abilita il puntatore del Mac. In simulazione, chiudi il pugno per 750 ms. |
+| Indice disteso e fermo per circa mezzo secondo durante la scansione | Abilita il puntatore del Mac. In simulazione, chiudi il pugno per 750 ms. |
 | Indice disteso, altre dita ripiegate | Muove il cursore. Smetti di puntare per fermarlo. |
 | Pinza breve partendo dal puntamento | Clic sinistro al rilascio. |
-| Pinza tenuta almeno 450 ms | Afferra. Muovi la mano per trascinare e apri le dita per rilasciare. |
+| Pinza tenuta almeno 400 ms | Afferra. Muovi la mano per trascinare e apri le dita per rilasciare. |
 | Indice e medio distesi, anulare e mignolo piegati | Scorri spostando le dita in verticale. |
 | Palmo aperto | Pausa. Per riprendere il controllo desktop, avvia una nuova scansione nello Studio. |
 

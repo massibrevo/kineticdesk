@@ -35,7 +35,7 @@ def create_app(port=5174, runtime=None):
         done = Event()
 
         def watch():
-            while not done.wait(.025):
+            while not done.wait(1 / 60):
                 runtime.watchdog()
 
         worker = Thread(target=watch, name="input-watchdog", daemon=True)
@@ -79,7 +79,7 @@ def create_app(port=5174, runtime=None):
     async def send_snapshots(ws):
         while True:
             await ws.send_json(await asyncio.to_thread(runtime.snapshot))
-            await asyncio.sleep(.065)
+            await asyncio.sleep(1 / 50)
 
     @app.websocket("/ws")
     async def socket(ws: WebSocket):
