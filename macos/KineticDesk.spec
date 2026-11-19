@@ -39,7 +39,7 @@ app = BUNDLE(
     version="0.2.0",
     info_plist={
         "CFBundleDisplayName": "KineticDesk",
-        "CFBundleVersion": "6",
+        "CFBundleVersion": "7",
         "LSMinimumSystemVersion": "13.0",
         "LSMultipleInstancesProhibited": True,
         "CFBundleDevelopmentRegion": "en",

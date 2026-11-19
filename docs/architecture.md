@@ -21,10 +21,17 @@ into input events. Synthetic replay feeds the same engine without a camera.
 The runtime uses a lock to coordinate commands, gesture state, input events,
 and button release. A watchdog checks the Studio lifecycle signal, pauses on
 prolonged tracking loss, and stops stalled camera sessions. The macOS app uses an
-AppKit timer to keep the connected Studio session alive when WebKit slows its
-timers in the background. The browser version uses a WebSocket heartbeat.
-Closing the socket stops capture and releases input. The Studio reconnects
-without arming the pointer.
+AppKit timer to own the approved native desktop session independently of the
+WebKit renderer. Closing the Studio window discards its renderer and turns off
+preview encoding. An already active session continues through the native
+watchdog and can be stopped from the status menu. An unfinished scan is
+cancelled. The app keeps a user-initiated activity only while desktop control
+is active, with idle system sleep allowed. Sleep, session changes, or a stalled
+native event loop end the session.
+
+The browser version uses a WebSocket heartbeat. A browser socket disconnect
+stops capture and releases input. Reconnecting restores the Studio connection
+without starting a scan.
 
 The Studio receives state updates at up to 30 Hz. The preview encodes at up to
 15 Hz and the server sends each image only once per connection. Camera capture

@@ -14,9 +14,15 @@ from AppKit import (
     NSMakeRect,
     NSMenu,
     NSMenuItem,
+    NSStatusBar,
     NSTextField,
+    NSVariableStatusItemLength,
+    NSView,
     NSWindow,
     NSWorkspace,
+    NSWorkspaceScreensDidSleepNotification,
+    NSWorkspaceSessionDidResignActiveNotification,
+    NSWorkspaceWillSleepNotification,
     NSWindowStyleMaskClosable,
     NSWindowStyleMaskMiniaturizable,
     NSWindowStyleMaskResizable,
@@ -24,7 +30,9 @@ from AppKit import (
 )
 from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
 from Foundation import (
+    NSActivityUserInitiatedAllowingIdleSystemSleep,
     NSObject,
+    NSProcessInfo,
     NSRunLoop,
     NSRunLoopCommonModes,
     NSTimer,
@@ -54,6 +62,11 @@ NATIVE_COPY = {
         "loading": "Starting KineticDesk…",
         "access": "Open Accessibility…",
         "pause": "Pause Desktop Control",
+        "open": "Open Studio",
+        "stop": "Stop Camera",
+        "active": "Desktop control active · Camera on",
+        "camera": "Camera on · Desktop control paused or inactive",
+        "off": "Camera off",
         "hide": "Hide KineticDesk",
         "quit": "Quit KineticDesk",
         "launch_failed": "KineticDesk couldn't start",
@@ -63,6 +76,11 @@ NATIVE_COPY = {
         "loading": "Avvio di KineticDesk…",
         "access": "Apri Accessibilità…",
         "pause": "Metti in pausa il controllo desktop",
+        "open": "Apri Studio",
+        "stop": "Spegni fotocamera",
+        "active": "Controllo desktop attivo · Fotocamera accesa",
+        "camera": "Fotocamera accesa · Controllo desktop in pausa o inattivo",
+        "off": "Fotocamera spenta",
         "hide": "Nascondi KineticDesk",
         "quit": "Esci da KineticDesk",
         "launch_failed": "Impossibile avviare KineticDesk",
@@ -101,6 +119,11 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         self.listener = None
         self.poller = None
         self.lifecycle_timer = None
+        self.web = None
+        self.status_item = None
+        self.status_state = None
+        self.activity = None
+        self.workspace_notifications = None
         try:
             self.listener = socket.socket()
             self.listener.bind(("127.0.0.1", 0))
@@ -129,6 +152,15 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         except Exception:
             self.showLaunchError()
             return
+        self.installStatusMenu()
+        self.workspace_notifications = NSWorkspace.sharedWorkspace().notificationCenter()
+        for name in (
+            NSWorkspaceWillSleepNotification, NSWorkspaceScreensDidSleepNotification,
+            NSWorkspaceSessionDidResignActiveNotification,
+        ):
+            self.workspace_notifications.addObserver_selector_name_object_(
+                self, "suspendSession:", name, None,
+            )
         self.poller = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             .05, self, "loadWhenReady:", None, True,
         )
@@ -158,23 +190,120 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         app_item.setSubmenu_(app_menu)
         NSApp.setMainMenu_(menu)
 
+    @objc.python_method
+    def installStatusMenu(self):
+        if self.status_item is None:
+            self.status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(
+                NSVariableStatusItemLength,
+            )
+        copy = NATIVE_COPY[self.language]
+        menu = NSMenu.alloc().init()
+        menu.setAutoenablesItems_(False)
+        self.status_summary = menu.addItemWithTitle_action_keyEquivalent_(copy["off"], None, "")
+        self.status_summary.setEnabled_(False)
+        menu.addItem_(NSMenuItem.separatorItem())
+        for title, action in (
+            (copy["open"], "showStudio:"), (copy["pause"], "pauseDesktop:"),
+            (copy["stop"], "stopCamera:"),
+        ):
+            item = menu.addItemWithTitle_action_keyEquivalent_(title, action, "")
+            item.setTarget_(self)
+            if action == "pauseDesktop:":
+                self.status_pause = item
+            elif action == "stopCamera:":
+                self.status_stop = item
+        menu.addItem_(NSMenuItem.separatorItem())
+        quit_item = menu.addItemWithTitle_action_keyEquivalent_(copy["quit"], "terminate:", "")
+        quit_item.setTarget_(NSApp)
+        self.status_item.setMenu_(menu)
+        self.status_state = None
+        self.updateStatusMenu()
+
+    @objc.python_method
+    def updateStatusMenu(self):
+        active, camera = self.runtime.native_status()
+        if (active, camera) == self.status_state:
+            return
+        self.status_state = active, camera
+        copy = NATIVE_COPY[self.language]
+        summary = copy["active"] if active else copy["camera"] if camera else copy["off"]
+        button = self.status_item.button()
+        button.setTitle_("KD ●" if active else "KD ◉" if camera else "KD")
+        button.setToolTip_(f"KineticDesk · {summary}")
+        button.setAccessibilityLabel_(f"KineticDesk · {summary}")
+        self.status_summary.setTitle_(summary)
+        self.status_pause.setEnabled_(active)
+        self.status_stop.setEnabled_(camera)
+
+        process = NSProcessInfo.processInfo()
+        if active and self.activity is None:
+            self.activity = process.beginActivityWithOptions_reason_(
+                NSActivityUserInitiatedAllowingIdleSystemSleep, "KineticDesk desktop control",
+            )
+        elif not active and self.activity is not None:
+            process.endActivity_(self.activity)
+            self.activity = None
+
     def pulseStudio_(self, _timer):
         self.runtime.pulse_native_window()
+        self.updateStatusMenu()
 
     def pauseDesktop_(self, _sender):
         if self.runtime is not None:
             self.runtime.pause_desktop()
+            self.updateStatusMenu()
+
+    def stopCamera_(self, _sender):
+        self.runtime.stop()
+        self.updateStatusMenu()
+
+    def suspendSession_(self, _notification):
+        self.runtime.stop("system-suspension")
+        self.updateStatusMenu()
+
+    def showStudio_(self, _sender):
+        NSApp.unhide_(None)
+        if self.window.isMiniaturized():
+            self.window.deminiaturize_(None)
+        if self.runtime is not None:
+            self.runtime.set_native_background(False)
+        self.window.makeKeyAndOrderFront_(None)
+        NSApp.activateIgnoringOtherApps_(True)
+        if self.web is None and self.server is not None and self.server.started:
+            self.loadStudio()
+
+    def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _visible):
+        self.showStudio_(None)
+        return False
+
+    def windowShouldClose_(self, window):
+        self.applicationDidHide_(None)
+        window.orderOut_(None)
+        if self.web is not None:
+            self.runtime.detach_studio()
+            self.web.setNavigationDelegate_(None)
+            self.web.stopLoading()
+            window.setContentView_(NSView.alloc().initWithFrame_(self.web.bounds()))
+            self.web = None
+        return False
 
     def applicationDidHide_(self, _notification):
         if self.runtime is not None:
-            self.runtime.hide_native_window()
+            self.runtime.set_native_background(True)
+            self.updateStatusMenu()
 
     def windowDidMiniaturize_(self, _notification):
         self.applicationDidHide_(_notification)
 
+    def windowDidBecomeKey_(self, _notification):
+        runtime = getattr(self, "runtime", None)
+        if runtime is not None:
+            runtime.set_native_background(False)
+
     def webViewWebContentProcessDidTerminate_(self, web):
-        self.runtime.discard_studio()
-        web.reload()
+        if web == self.web:
+            self.runtime.detach_studio()
+            web.reload()
 
     @objc.python_method
     def queueLanguageChange(self, language):
@@ -184,6 +313,7 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
     def changeLanguage(self, language):
         self.language = language
         self.installMenu()
+        self.installStatusMenu()
 
     @objc.python_method
     def queueAccessibility(self):
@@ -212,19 +342,24 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
     def loadWhenReady_(self, timer):
         if self.server.started:
             timer.invalidate()
-            config = WKWebViewConfiguration.alloc().init()
-            config.setLimitsNavigationsToAppBoundDomains_(True)
-            config.setWebsiteDataStore_(WKWebsiteDataStore.nonPersistentDataStore())
-            self.web = WKWebView.alloc().initWithFrame_configuration_(
-                self.window.contentView().bounds(), config,
-            )
-            self.web.setNavigationDelegate_(self)
-            self.window.setContentView_(self.web)
-            url = NSURL.URLWithString_(f"http://127.0.0.1:{self.port}/")
-            self.web.loadRequest_(NSURLRequest.requestWithURL_(url))
+            if self.window.isVisible() and self.web is None:
+                self.loadStudio()
         elif not self.thread.is_alive():
             timer.invalidate()
             self.showLaunchError()
+
+    @objc.python_method
+    def loadStudio(self):
+        config = WKWebViewConfiguration.alloc().init()
+        config.setLimitsNavigationsToAppBoundDomains_(True)
+        config.setWebsiteDataStore_(WKWebsiteDataStore.nonPersistentDataStore())
+        self.web = WKWebView.alloc().initWithFrame_configuration_(
+            self.window.contentView().bounds(), config,
+        )
+        self.web.setNavigationDelegate_(self)
+        self.window.setContentView_(self.web)
+        url = NSURL.URLWithString_(f"http://127.0.0.1:{self.port}/")
+        self.web.loadRequest_(NSURLRequest.requestWithURL_(url))
 
     @objc.python_method
     def showLaunchError(self, details=None):
@@ -239,13 +374,20 @@ class StudioDelegate(NSObject, protocols=[objc.protocolNamed("WKNavigationDelega
         self.showLaunchError(error.localizedDescription())
 
     def applicationShouldTerminateAfterLastWindowClosed_(self, _application):
-        return True
+        return False
 
     def applicationWillTerminate_(self, _notification):
         if self.poller is not None:
             self.poller.invalidate()
         if self.lifecycle_timer is not None:
             self.lifecycle_timer.invalidate()
+        if self.workspace_notifications is not None:
+            self.workspace_notifications.removeObserver_(self)
+        if self.activity is not None:
+            NSProcessInfo.processInfo().endActivity_(self.activity)
+            self.activity = None
+        if self.status_item is not None:
+            NSStatusBar.systemStatusBar().removeStatusItem_(self.status_item)
         if self.runtime is not None:
             self.runtime.stop("shutdown")
         if self.server is not None:

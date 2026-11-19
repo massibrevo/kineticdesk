@@ -26,9 +26,11 @@ switches the Studio to Italian.
    Repeat the trials on the primary display with a scratch document and
    disposable draggable items. Keep the physical mouse available. Record
    failures by gesture and lighting level.
-6. Close the Studio during a drag. Check that the mouse button releases and
-   the camera light goes out. When you reopen the Studio, the session should
-   start stopped.
+6. Close the native Studio while desktop control is active. Verify that pointer
+   control continues and **KD** in the menu bar shows the active session. Pause
+   from the menu during a drag and check that the mouse button releases and the
+   camera light goes out. Reopen the Studio from the menu and verify that a new
+   scan is required. Repeat the release check with **Quit KineticDesk**.
 
 The camera at index 0 is OpenCV's default. Stop the camera before choosing
 another index. The mirrored preview works with either hand. On macOS,

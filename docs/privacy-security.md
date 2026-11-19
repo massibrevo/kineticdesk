@@ -17,8 +17,10 @@ set of commands. A content security policy restricts what the Studio can load.
 The native WebKit window limits navigation to the local app origin's host.
 
 Desktop input requires fresh camera tracking, Accessibility permission, and
-an explicit scan request. Opening your palm, losing tracking, losing the
-Studio connection, or quitting releases any held button. The release path
+an explicit scan request. The native app can continue an active session with
+its window closed and shows camera and input status in the menu bar. Loss of
+tracking, a stalled lifecycle check, a browser disconnect, Mac sleep, or quit
+releases any held button. The release path
 bypasses the corner fail-safe check so it can still send mouse-up. macOS can
 reject input after a permission or session change. Use **Stop** or quit normally
 to let the app release input and shut down the capture thread.

@@ -23,8 +23,10 @@ mirroring setting.
 | Armed or Dragging | Briefly lose tracking | Hold the pointer still and resume on a fresh frame within the grace period. |
 | Dragging | Lose tracking for 110 ms | Release the mouse button once and cancel the drag. |
 | Armed, Pinching, or Dragging | Open palm for 175 ms, lose tracking for 750 ms, or remain idle for 45 seconds | Release any held button and pause. |
-| Scanning or controlling the desktop | Hide the browser tab, or hide or minimize the native window | Cancel the scan or release any held button and pause. |
-| Any | Stop, disconnect, heartbeat expires, camera fails, or the app quits | Release any held button, stop, and discard consent. |
+| Scanning or controlling the desktop | Hide the browser tab | Cancel the scan or release any held button and pause. |
+| Scanning | Close, hide, or minimize the native Studio window | Cancel the scan and stop capture. |
+| Native desktop control active | Close, hide, or minimize the Studio window | Keep the active session with the native watchdog and status menu. Disable preview encoding. |
+| Any | Stop, browser disconnect, lifecycle timeout, camera failure, sleep, session change, or quit | Release any held button, stop, and discard consent. |
 | Paused | Start simulation or request a new scan | Wait for the corresponding activation gesture. |
 
 The pinch uses separate thresholds for closing and opening to avoid repeated

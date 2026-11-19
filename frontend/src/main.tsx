@@ -34,6 +34,7 @@ const reasons: Record<string, Message> = {
   'ui-pause': 'pausedManually', 'tab-hidden': 'tabHidden', 'window-hidden': 'windowHidden',
   'input-error': 'inputError', 'camera-error': 'cameraError', 'camera-stalled': 'cameraInterrupted',
   'ui-timeout': 'connectionExpired', 'ui-disconnected': 'connectionEnded',
+  'system-suspension': 'systemSuspension',
 }
 const actions: Record<string, Message> = {
   move: 'movement', click: 'leftClick', down: 'mouseDown', up: 'mouseUp', scroll: 'scrolling',
@@ -377,6 +378,7 @@ function App() {
                   : frame.mode === 'paused'
                     ? t('resumeInstructions')
                     : t('simulationInstructions')}</p>}
+              {frame?.nativeWindow && frame.desktop && <p className="permission">{t('backgroundInstructions')}</p>}
               {frame?.mode === 'ready' && !frame.scanning && (cameraReady || replay) &&
                 <div className="arming"><span>{t('holdFist')}</span><progress aria-label={t('armProgress')} max="1" value={frame.armProgress}/></div>}
               <dl className="devices">

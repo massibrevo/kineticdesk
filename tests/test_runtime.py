@@ -18,7 +18,8 @@ class FakeInput:
 
     def apply(self, action):
         self.events.append(action.kind)
-        self.held = action.kind == "down"
+        if action.kind in ("down", "up"):
+            self.held = action.kind == "down"
 
     def release(self):
         if self.held:
@@ -246,21 +247,42 @@ def test_camera_frame_stall_freezes_then_resumes_before_safety_pause(runtime, mo
     assert runtime.input is None
 
 
-def test_native_window_keeps_pointer_armed_in_background_but_pauses_when_hidden(
-    runtime, monkeypatch,
-):
+class BackgroundCamera:
+    def __init__(self):
+        self.preview = True
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+
+def arm_native_drag(runtime):
     runtime.native_window = True
     owner = object()
     runtime.connect(owner)
     runtime.engine.mode = "dragging"
     runtime.source = "camera"
+    runtime.camera = BackgroundCamera()
+    runtime.preview_requested = True
     adapter = FakeInput()
     runtime.input = adapter
     now = monotonic()
-    monkeypatch.setattr("kineticdesk.runtime.monotonic", lambda: now)
+    runtime.engine.last_seen = runtime.last_frame = runtime.engine.last_active = now
     runtime._actions([Action(kind="down", at=now)])
-    runtime.handle(owner, {"command": "tab-hidden"})
-    assert adapter.events == ["down"]
+    return owner, adapter, runtime.camera
+
+
+def test_native_session_survives_window_close_and_studio_reconnect(runtime, monkeypatch):
+    owner, adapter, camera = arm_native_drag(runtime)
+    now = monotonic()
+    monkeypatch.setattr("kineticdesk.runtime.monotonic", lambda: now)
+    runtime.set_native_background(True)
+    runtime.detach_studio()
+    runtime.disconnect(owner)
+    assert runtime.snapshot_for(owner) is None
+    assert runtime.health()["background"] and runtime.health()["desktop"]
+    assert not runtime.health()["studioConnected"]
+    assert not camera.preview and not camera.stopped
 
     for _ in range(10):
         now = runtime.lease + .35
@@ -269,10 +291,58 @@ def test_native_window_keeps_pointer_armed_in_background_but_pauses_when_hidden(
         runtime.pulse_native_window()
         runtime.watchdog()
         assert runtime.input is adapter
-    runtime.hide_native_window()
-    assert runtime.engine.reason == "window-hidden"
-    assert adapter.events == ["down", "up"]
+    assert adapter.events == ["down"]
+    now += .04
+    runtime._frame(camera, now, frame("pinch", x=.05), 4 / 3, None)
+    assert adapter.events == ["down", "move"]
+
+    runtime.set_native_background(False)
+    new_owner = object()
+    assert runtime.connect(new_owner)
+    assert camera.preview and runtime.snapshot_for(new_owner)["desktop"]
+    runtime.stop()
+    assert adapter.events == ["down", "move", "up"]
+    assert camera.stopped
+
+
+def test_background_studio_cannot_complete_an_unconfirmed_scan(runtime):
+    runtime.native_window = True
+    owner = object()
+    runtime.connect(owner)
+    runtime.camera = camera = BackgroundCamera()
+    runtime.source = "camera"
+    runtime.engine.begin(monotonic(), "scan", arm_pose="point")
+
+    runtime.set_native_background(True)
+    runtime.handle(owner, {"command": "scan"})
+    assert camera.stopped
+    assert not runtime.snapshot()["scanning"]
     assert runtime.input is None
+
+
+@pytest.mark.parametrize("cause", ["menu-pause", "system-suspension", "lease", "tracking-loss"])
+def test_native_background_exits_safely_without_a_studio_connection(runtime, monkeypatch, cause):
+    _owner, adapter, camera = arm_native_drag(runtime)
+    now = runtime.lease
+    monkeypatch.setattr("kineticdesk.runtime.monotonic", lambda: now)
+    runtime.set_native_background(True)
+    runtime.detach_studio()
+    if cause == "menu-pause":
+        runtime.pause_desktop()
+    elif cause == "system-suspension":
+        runtime.stop("system-suspension")
+    elif cause == "lease":
+        now += LEASE + .1
+        runtime.watchdog()
+        assert runtime.engine.reason == "ui-timeout"
+    else:
+        now = runtime.last_frame + runtime.engine.LOST + .01
+        runtime.watchdog()
+        assert runtime.engine.reason == "tracking-lost"
+    assert adapter.events == ["down", "up"]
+    assert camera.stopped and runtime.input is None
+    runtime.pulse_native_window()
+    assert not runtime.health()["desktop"]
 
 
 def test_studio_language_is_persisted_without_resuming_input(runtime):

@@ -72,12 +72,15 @@ without sending input to macOS.
 | Hold up an open palm | Pauses control. Start a new scan to resume. |
 
 **Esc** pauses control while the Studio has focus. **Stop** also turns off the
-camera. On macOS, switching to another app leaves control running. Hiding or
-minimizing KineticDesk pauses it. In a browser, hiding the Studio tab pauses
-control. After a real connection loss, the Studio reconnects and waits for a
-new scan. Moving the physical pointer
+camera. On macOS, close, hide, or minimize the Studio to keep an active desktop
+session running in the background. Use **KD** in the menu bar to reopen the
+Studio, pause control, stop the camera, or quit. The menu reports when desktop
+control or the camera is active. A scan must finish before you close the window.
+
+In a browser, hiding the Studio tab pauses control. Moving the physical pointer
 into a corner of the main display triggers the fail-safe on the next input
-action. Quit the native app with **⌘Q** or press **Ctrl+C** in the terminal if
+action. Mac sleep, session changes, and app quit stop capture and release any held
+button. Quit the native app with **⌘Q** or press **Ctrl+C** in the terminal if
 you launched from source.
 
 ## Verification and platform support

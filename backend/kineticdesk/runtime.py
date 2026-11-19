@@ -28,6 +28,7 @@ class Runtime:
         self.profile = load_profile()
         self.language = load_language()
         self.native_window = native_window
+        self.native_background = False
         self.language_changed = language_changed
         self.defaults = Profile().model_dump()
         self.engine = GestureEngine(self.profile)
@@ -46,6 +47,7 @@ class Runtime:
         self.points = None
         self.aspect = 4 / 3
         self.preview = None
+        self.preview_requested = False
         self.error = None
         self.history = deque(maxlen=100)
         self.action_id = 0
@@ -57,23 +59,47 @@ class Runtime:
 
     def health(self):
         with self.lock:
-            return {"status": "ok", "device": self.device, "source": self.source,
-                    "mode": self.engine.mode, "reason": self.engine.reason}
+            return {
+                "status": "ok", "device": self.device, "source": self.source,
+                "mode": self.engine.mode, "reason": self.engine.reason,
+                "desktop": self._output_available(), "background": self.native_background,
+                "studioConnected": self.owner is not None,
+            }
+
+    def native_status(self):
+        with self.lock:
+            return self._output_available(), self.source == "camera"
+
+    def _has_lifecycle(self):
+        return self.owner is not None or (self.native_window and self._output_available())
 
     def pulse_native_window(self):
         with self.lock:
-            if self.native_window and self.owner is not None:
+            if self.native_window and self._has_lifecycle():
                 self._renew_lease(monotonic())
 
     def pause_desktop(self):
         with self.lock:
             if self._output_available() or self._scanning():
                 self._pause("ui-pause")
+                self._release_if_paused()
 
-    def hide_native_window(self):
+    def set_native_background(self, background):
         with self.lock:
-            if self.native_window and (self._output_available() or self._scanning()):
-                self._pause("window-hidden")
+            if not self.native_window:
+                return
+            self.native_background = background
+            if background and self.source != "off" and not self._output_available():
+                self.stop("window-hidden")
+            self._sync_preview()
+
+    def _sync_preview(self):
+        if self.camera is not None:
+            self.camera.preview = (
+                self.preview_requested and not self.native_background and self.owner is not None
+            )
+        if self.camera is None or not self.camera.preview:
+            self.preview = None
 
     def refresh_permissions(self):
         with self.lock:
@@ -97,12 +123,13 @@ class Runtime:
     def connect(self, owner):
         with self.lock:
             now = monotonic()
-            if self.owner is not None:
-                if now - self.lease < LEASE:
-                    return False
+            if self._has_lifecycle() and now - self.lease >= LEASE:
                 self.discard_studio("ui-timeout")
+            if self.owner is not None:
+                return False
             self.owner = owner
             self.lease = now
+            self._sync_preview()
             return True
 
     def discard_studio(self, reason="ui-disconnected"):
@@ -110,10 +137,18 @@ class Runtime:
             self.stop(reason)
             self.owner = None
 
+    def detach_studio(self):
+        """Release the renderer without revoking an armed native session."""
+        with self.lock:
+            self.owner = None
+            if not (self.native_window and self._output_available()):
+                self.stop("ui-disconnected")
+            self._sync_preview()
+
     def disconnect(self, owner):
         with self.lock:
             if owner is self.owner:
-                self.discard_studio()
+                self.detach_studio()
 
     def _renew_lease(self, now):
         if now - self.lease >= LEASE:
@@ -184,6 +219,7 @@ class Runtime:
             self.engine.mode = "stopped"
             self.source = "off"
             self.demo_started = None
+            self.preview_requested = False
             self.points = self.preview = self.last_frame = None
             if self.camera is not None:
                 self.camera.stop()
@@ -207,6 +243,8 @@ class Runtime:
             if owner is not self.owner:
                 return
             command = message.get("command")
+            if self.native_background and command not in ("stop", "pause", "heartbeat"):
+                return
             now = monotonic()
             if command == "heartbeat":
                 if not self.native_window:
@@ -222,6 +260,7 @@ class Runtime:
             self.stop()
         elif command == "pause":
             self._pause("ui-pause")
+            self._release_if_paused()
         elif command == "tab-hidden":
             if not self.native_window and (self._output_available() or self._scanning()):
                 self._pause("tab-hidden")
@@ -257,16 +296,16 @@ class Runtime:
                 self._pause("scan")
                 if self.input is not None:
                     raise StudioError("mouse-release-pending")
-                self.camera.preview = True
+                self.preview_requested = True
+                self._sync_preview()
                 self.engine.begin(now, "scan", arm_pose="point")
                 self.error = None
         elif command == "demo":
             self._new_source("replay")
             self.demo_started = now
         elif command == "preview" and self.camera is not None:
-            self.camera.preview = message.get("enabled") is True
-            if not self.camera.preview:
-                self.preview = None
+            self.preview_requested = message.get("enabled") is True
+            self._sync_preview()
         elif command == "dry-run" and self.camera is not None:
             self._pause("dry-run")
             if self.input is None:
@@ -332,7 +371,14 @@ class Runtime:
                 self._pause("input-error")
                 return
         self._actions(actions, at)
-        if self.engine.mode == "paused":
+        self._release_if_paused()
+
+    def _release_if_paused(self):
+        if self.engine.mode != "paused":
+            return
+        if self.native_window and (self.native_background or self.owner is None):
+            self.stop(self.engine.reason)
+        else:
             self._release()
 
     def watchdog(self):
@@ -340,7 +386,7 @@ class Runtime:
             now = monotonic()
             if self.input is not None and not self._output_available():
                 self._release()
-            if self.owner is not None and now - self.lease >= LEASE:
+            if self._has_lifecycle() and now - self.lease >= LEASE:
                 self.discard_studio("ui-timeout")
                 return
             if self.source == "off":
@@ -361,8 +407,7 @@ class Runtime:
                     self.error = "camera-start-timeout"
                 elif self.last_frame is not None and now - self.last_frame > FRAME_FRESHNESS:
                     self._actions(self.engine.tick(now, None))
-                    if self.engine.mode == "paused":
-                        self._release()
+                    self._release_if_paused()
 
     def snapshot(self):
         with self.lock:
